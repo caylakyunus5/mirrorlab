@@ -1,0 +1,43 @@
+# GitHub Pages: static/*.src.js değişince arayüzü yeniden üretip yayına alır.
+# Modüller static/index.html'e gömülür, HF kabuğu (motor adresi gömülü) docs/ altına yazılır.
+name: Arayüzü yayına al (GitHub Pages)
+on:
+  push:
+    branches: [main]
+    paths: ["static/**", "deploy/embed.sh", "deploy/huggingface-static/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+
+      - name: Modülleri göm ve denetle
+        run: bash deploy/embed.sh
+
+      - name: Arayüz kabuğunu üret (motor adresi gömülü)
+        run: bash deploy/huggingface-static/build.sh --api=https://mirrorlab-edge.yunusnavi.workers.dev
+
+      - name: docs/ klasörünü güncelle
+        run: |
+          mkdir -p docs
+          cp deploy/huggingface-static/index.html docs/index.html
+          cp deploy/huggingface-static/hf-shell.js docs/hf-shell.js
+          cp deploy/huggingface-static/favicon.svg docs/favicon.svg
+
+      - name: Değişiklik varsa commit'le
+        run: |
+          if git diff --quiet -- docs/index.html docs/hf-shell.js docs/favicon.svg static/index.html; then
+            echo "değişiklik yok"; exit 0
+          fi
+          git config user.name "MirrorLab Bot"
+          git config user.email "mirrorlab-bot@users.noreply.github.com"
+          git add docs/index.html docs/hf-shell.js docs/favicon.svg static/index.html
+          git commit -m "arayüz: modüller gömüldü, docs/ güncellendi [skip ci]"
+          git push

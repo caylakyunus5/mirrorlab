@@ -1,0 +1,28 @@
+# (İSTEĞE BAĞLI) Ücretsiz planlarda uykuyu engellemek için sağlık kontrolü pingi.
+#
+# ⚠️ Uyarılar:
+#  - Render ücretsiz planı ayda 750 instance-saat verir; 30 dakikada bir ping = ~730 saat.
+#    Sınırı aşarsanız Render ay boyunca ücretsiz servisleri askıya alır. 30 dk'dan sık ping atmayın.
+#  - Hugging Face Spaces 48 saat hareketsizlikte uyur; günde birkaç ping yeterlidir.
+#  - Bu iş akışını yalnızca kendi barındırdığınız adres için kullanın (başkasının sunucusuna ping atmayın).
+
+name: Uykuyu engelle (opsiyonel)
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sağlık kontrolü
+        env:
+          TARGET: ${{ vars.MIRRORLAB_URL }}   # Repo > Settings > Variables > Actions
+        run: |
+          if [ -z "${TARGET:-}" ]; then
+            echo "MIRRORLAB_URL değişkeni tanımlı değil, atlanıyor."
+            exit 0
+          fi
+          curl -fsS --max-time 90 "$TARGET/api/health" && echo " ✅ ayakta"

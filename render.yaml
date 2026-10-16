@@ -1,0 +1,27 @@
+# Render.com Blueprint — ücretsiz plan (512 MB RAM, 0.1 CPU, 15 dk hareketsizlikte uyur)
+# Kullanım: Render panosunda "New > Blueprint" ile bu repoyu bağlayın.
+# NOT: Ücretsiz planda Chrome için RAM darsa MIRRORLAB_ENGINE=off yapın;
+#      statik analiz + önizleme + tek dosya + tam ayna çalışmaya devam eder.
+services:
+  - type: web
+    name: mirrorlab
+    runtime: docker
+    plan: free
+    region: frankfurt          # Türkiye'ye en yakın ücretsiz bölge
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: MIRRORLAB_ENGINE
+        value: "auto"          # RAM yetersizse "off"
+      - key: MIRRORLAB_ENGINE_CONCURRENCY
+        value: "1"
+      - key: MIRRORLAB_LOWMEM
+        value: "1"             # --single-process, mobil görüntü kapalı
+      - key: MIRRORLAB_RATE_LIMIT
+        value: "20"
+      - key: MIRRORLAB_MAX_PAGES
+        value: "25"            # ücretsiz planda ağır işleri küçült
+      - key: MIRRORLAB_MAX_ASSETS
+        value: "150"

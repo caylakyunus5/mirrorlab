@@ -1,0 +1,87 @@
+# Sunucusuz mod: GitHub Actions'ı işçi olarak kullanır (sunucu barındırmaya gerek yok).
+# Public repolarda Actions dakikaları ücretsizdir.
+#
+# Kullanım: Actions sekmesi > "Site aynala (sunucusuz)" > Run workflow > adresi gir.
+# Çıktı: mirror.zip (+ istersen analysis.json kanıt paketi) artifact olarak indirilir.
+
+name: Site aynala (sunucusuz)
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Aynalanacak adres (https://...)"
+        required: true
+        default: "https://example.com"
+      max_pages:
+        description: "Maksimum sayfa"
+        required: true
+        default: "25"
+      max_assets:
+        description: "Maksimum varlık"
+        required: true
+        default: "200"
+      engine:
+        description: "Tarayıcı analizi (ağ/API/ekran görüntüsü) de çalışsın mı?"
+        type: choice
+        options: ["hayır", "evet"]
+        default: "hayır"
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Siteyi aynala (ZIP)
+        run: |
+          python3 server.py --crawl "${{ inputs.url }}" mirror.zip \
+            "${{ inputs.max_pages }}" "${{ inputs.max_assets }}"
+
+      - name: Tarayıcı analizi (opsiyonel)
+        if: ${{ inputs.engine == 'evet' }}
+        run: |
+          npm install puppeteer --no-fund --no-audit
+          npx puppeteer browsers install chrome
+          python3 server.py --engine "${{ inputs.url }}" analysis.json || true
+
+      - name: Kanıt paketinden özet çıkar
+        if: ${{ inputs.engine == 'evet' }}
+        run: |
+          python3 - <<'PY' || true
+          import json, pathlib
+          p = pathlib.Path("analysis.json")
+          if not p.exists():
+              raise SystemExit
+          d = json.loads(p.read_text())
+          lines = [
+              f"# Analiz özeti — {d.get('finalUrl')}",
+              "",
+              f"- ağ isteği: {len(d.get('network') or [])}",
+              f"- API çağrısı: {len(d.get('api') or [])}",
+              f"- bölüm: {len(d.get('sections') or [])}",
+              f"- çatılar: {', '.join(f.get('name','') for f in (d.get('frameworks') or []))}",
+              f"- renkler: {', '.join(c.get('value','') for c in (d.get('design',{}).get('colors') or [])[:8])}",
+              "",
+              "## Sınırlar",
+              *[f"- {x}" for x in (d.get("limits") or [])],
+          ]
+          pathlib.Path("ANALIZ-OZETI.md").write_text("\n".join(lines), encoding="utf-8")
+          print("\n".join(lines))
+          PY
+
+      - name: Artifact yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: mirror-${{ github.run_number }}
+          path: |
+            mirror.zip
+            analysis.json
+            ANALIZ-OZETI.md
+          if-no-files-found: error
+          retention-days: 14

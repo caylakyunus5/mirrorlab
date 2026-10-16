@@ -1,0 +1,36 @@
+# MirrorLab systemd servisi (kendi sunucunuz / Oracle Always Free VM için)
+# Kurulum:
+#   sudo mkdir -p /opt/mirrorlab && sudo rsync -a --exclude node_modules --exclude output ./ /opt/mirrorlab/
+#   cd /opt/mirrorlab && sudo npm install puppeteer && sudo npx puppeteer browsers install chrome
+#   sudo cp deploy/mirrorlab.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mirrorlab
+
+[Unit]
+Description=MirrorLab — site tersine mühendislik stüdyosu
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mirrorlab
+Group=mirrorlab
+WorkingDirectory=/opt/mirrorlab
+Environment=PORT=8000
+Environment=MIRRORLAB_ENGINE=auto
+Environment=MIRRORLAB_ENGINE_CONCURRENCY=2
+Environment=MIRRORLAB_RATE_LIMIT=60
+Environment=MIRRORLAB_LOWMEM=0
+ExecStart=/usr/bin/python3 /opt/mirrorlab/server.py
+Restart=always
+RestartSec=5
+
+# Güvenlik sıkılaştırma (Chrome --no-sandbox kullandığı için hafif tutuldu)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/mirrorlab/output
+# Bellek sınırı: 24 GB'lık Always Free ARM makinesinde motor için tavan
+MemoryMax=4G
+
+[Install]
+WantedBy=multi-user.target

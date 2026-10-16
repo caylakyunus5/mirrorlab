@@ -1,0 +1,29 @@
+# Kendi sunucunuzda / ev bilgisayarınızda çalıştırma
+#   docker compose up -d      →  http://localhost:8000
+services:
+  mirrorlab:
+    build: .
+    image: mirrorlab:latest
+    container_name: mirrorlab
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      MIRRORLAB_ENGINE: "auto"          # auto | on | off
+      MIRRORLAB_ENGINE_CONCURRENCY: "1" # aynı anda kaç headless Chrome
+      MIRRORLAB_RATE_LIMIT: "40"        # IP başına saatlik analiz; 0 = sınırsız
+      MIRRORLAB_LOWMEM: "0"             # 1 = 512 MB planlar için sıkışık mod
+      MIRRORLAB_MAX_PAGES: "60"
+      MIRRORLAB_MAX_ASSETS: "400"
+      MIRRORLAB_MAX_MB: "80"
+    # Chrome paylaşımlı bellekte çok yer ister
+    shm_size: "1gb"
+    volumes:
+      - ./output:/app/output            # arşivler ve ekran görüntüleri kalıcı olsun
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=5)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 25s

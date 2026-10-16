@@ -1,0 +1,32 @@
+# Caddy — kendi sunucunuzda (Oracle Always Free VM, ev sunucusu, VPS) otomatik HTTPS
+# Kurulum:  sudo apt install -y caddy && sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+#           sudo systemctl reload caddy
+#
+# Alan adınız yoksa Caddy'nin dahili sertifikası için "mirrorlab.local" gibi bir ad kullanabilir
+# ya da Cloudflare Tunnel ile ücretsiz HTTPS alabilirsiniz (bkz. DEPLOY.md).
+
+mirrorlab.ornek.com {
+	encode zstd gzip
+
+	# Tarayıcı analizi ve aynalama uzun sürebilir
+	reverse_proxy 127.0.0.1:8000 {
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Basit erişim günlüğü
+	log {
+		output file /var/log/caddy/mirrorlab.log
+		format json
+	}
+}

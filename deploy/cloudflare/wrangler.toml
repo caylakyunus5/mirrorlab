@@ -1,0 +1,42 @@
+# Cloudflare Worker + statik arayüz (ücretsiz plan)
+#
+#   npx wrangler deploy --config deploy/cloudflare/wrangler.toml
+#
+# Komut: depo kökünden →  npx wrangler deploy --config deploy/cloudflare/wrangler.toml
+name = "mirrorlab-edge"
+main = "worker.js"   # wrangler.toml dosyasına göreli
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]   # @cloudflare/puppeteer için gerekli
+
+# Browser Rendering bağlayıcısı — /api/deep rotası bunu kullanır (ücretsiz: günde 10 dk)
+[browser]
+binding = "BROWSER"
+
+# Arayüz dosyaları (static/) aynı Worker üzerinden servis edilir.
+# /api/* yolları Worker'a düşer, geri kalanı statik dosyalardan karşılanır.
+[assets]
+directory = "../../static"  # wrangler.toml dosyasına göreli
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[observability]
+enabled = true
+
+[vars]
+# Hız sınırı kodun içinde (IP başına saatlik, izolat belleğinde).
+# Kalıcı/küresel bir sınır isterseniz panodan WAF > Rate limiting kuralı ekleyin.
+MIRRORLAB_EDGE = "1"
+
+# ---------------------------------------------------------------------------
+# OPSİYONEL: kalıcı hız sınırı veya sayaç için KV kullanmak isterseniz:
+#
+# [[kv_namespaces]]
+# binding = "RATE"
+# id = "<KV_NAMESPACE_ID>"
+#
+# OPSİYONEL: R2'ye arşiv yazmak isterseniz (ücretsiz 10 GB):
+#
+# [[r2_buckets]]
+# binding = "ARCHIVE"
+# bucket_name = "mirrorlab-archive"
+# ---------------------------------------------------------------------------

@@ -1,0 +1,19 @@
+{
+  "name": "mirrorlab",
+  "version": "1.0.0",
+  "description": "Herhangi bir kamuya açık web sitesini **çeker, analiz eder, önizler, tek dosya olarak kaydeder ve tam ayna kopyasını ZIP olarak indirir.** Tamamen **Python standart kütüphanesi** ile yazıldı — `pip install` gerekmez, harici servis kullanmaz, her şey kendi makinenizde çalışır.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@cloudflare/puppeteer": "^1.4.0",
+    "puppeteer": "^24.43.1"
+  },
+  "devDependencies": {
+    "wrangler": "^4.86.0"
+  }
+}

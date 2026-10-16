@@ -1,0 +1,16 @@
+# İmaj bağlamına girmesin (imaj içinde npm install ile üretilir)
+node_modules
+.cache
+output
+*.zip
+*.log
+__pycache__
+*.pyc
+
+# Geliştirme / dağıtım artıkları
+.git
+.gitignore
+.github
+deploy
+dbg.js
+/tmp

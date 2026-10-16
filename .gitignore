@@ -1,0 +1,14 @@
+# Bağımlılıklar / üretilen çıktılar
+node_modules/
+.cache/
+__pycache__/
+*.pyc
+*.log
+
+# Çalışma zamanı çıktıları (arşivler + ekran görüntüleri)
+output/
+*.zip
+
+# Yerel ayarlar
+.env
+.DS_Store
