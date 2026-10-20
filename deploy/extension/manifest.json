@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "MirrorLab — Çevrimdışı Web & Oyun Aynalayıcı",
+  "version": "1.0.0",
+  "description": "%100 Yerel, Sıfır Backend: CORS engeli olmadan web sitelerini, HTML5 oyunlarını ve kaynak kodları tek tıkla cihazınıza klonlayın.",
+  "action": {
+    "default_title": "MirrorLab'i Aç",
+    "default_popup": "index.html"
+  },
+  "permissions": [
+    "declarativeNetRequest",
+    "declarativeNetRequestFeedback",
+    "storage",
+    "unlimitedStorage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

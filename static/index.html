@@ -478,6 +478,7 @@
         <button class="btn" id="pauseCrawl" disabled title="Kuyruğu ve sayaçları koruyarak kopyalamayı duraklatır; aynı düğmeyle devam eder.">[||] Duraklat</button>
         <button class="btn" id="sitemapBtn" title="sitemap.xml dosyasını okur, sayfaları listeler; istediklerinizi seçip kopyalarsınız"># Sitemap'ten seç</button>
         <button class="btn" id="dlZip" disabled>▼ ZIP'i indir</button>
+        <button class="btn" id="surgeDeployBtn" disabled style="background:#b1178c;color:#fff;border-color:#e026b2" title="Klonlanan siteyi anında Surge.sh üzerine canlıya alır">🚀 Surge'e Yayınla</button>
         <div class="spacer"></div>
         <span class="hint" id="crawlStat">hazır</span>
       </div>
@@ -911,6 +912,35 @@
         if(j.status==="running"){ $("#crawlStat").textContent="çalışıyor…"; poll(); }
         else if(j.status==="done"){
           $("#dlZip").disabled=false;
+          const sBtn = $("#surgeDeployBtn");
+          if(sBtn){
+            sBtn.disabled = false;
+            sBtn.onclick = async () => {
+              const dom = prompt("Surge.sh için özel alan adı (örnek: benim-sitem.surge.sh, boş bırakırsanız otomatik üretilir):", "");
+              if (dom === null) return;
+              sBtn.disabled = true; sBtn.textContent = "🚀 Yayınlanıyor…";
+              try {
+                const res = await fetch(apiUrl("/api/deploy/surge"), {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ id: state.job, domain: dom.trim() })
+                });
+                const d = await res.json();
+                if (d.ok) {
+                  sBtn.textContent = "✓ Yayınlandı!";
+                  alert("🎉 Tebrikler! Siteniz canlıya alındı:\n" + d.url);
+                  window.open(d.url, "_blank");
+                } else {
+                  alert("Surge yayını başarısız: " + (d.error || "Bilinmeyen hata"));
+                  sBtn.textContent = "🚀 Surge'e Yayınla";
+                  sBtn.disabled = false;
+                }
+              } catch(e) {
+                alert("Hata: " + e.message);
+                sBtn.textContent = "🚀 Surge'e Yayınla";
+                sBtn.disabled = false;
+              }
+            };
+          }
           $("#crawlStat").textContent = (j.result? (j.result.sayfa_sayisi+" sayfa · "+fmtBytes(j.result.toplam_bayt)) : "") + (j.has_zip? " · ZIP hazır" : "");
           $("#zipLink").href = apiUrl("/api/crawl/file?id="+encodeURIComponent(state.job));
           $("#dlZip").onclick = ()=>{ window.location.href = apiUrl("/api/crawl/file?id="+encodeURIComponent(state.job)); };
@@ -1661,6 +1691,18 @@
         });
         el.setAttribute("srcset", parts.join(", "));
       });
+      /* Game & Ad SDK Shim: çevrimdışı donmaları ve domain kilitlerini aşar */
+      const shim = doc.createElement("script");
+      shim.setAttribute("data-mirrorlab", "game-shim");
+      shim.textContent = "/* MirrorLab Game & Ad SDK Shim */\n" +
+        "window.PokiSDK=window.PokiSDK||{init:()=>Promise.resolve(),initWithVideoHB:()=>Promise.resolve(),commercialBreak:()=>Promise.resolve(),rewardedBreak:()=>Promise.resolve(true),displayAd:()=>{},destroyAd:()=>{},gameLoadingStart:()=>{},gameLoadingFinished:()=>{},gameplayStart:()=>{},gameplayStop:()=>{},happyTime:()=>{},setDebug:()=>{}};\n" +
+        "window.CrazyGames=window.CrazyGames||{SDK:{ad:{requestAd:(t,cb)=>{if(cb&&cb.adFinished)cb.adFinished();},hasAdblock:()=>Promise.resolve(false)},game:{gameplayStart:()=>{},gameplayStop:()=>{},happytime:()=>{},loadingStart:()=>{},loadingStop:()=>{}},user:{isUserAccountAvailable:false,getUser:()=>Promise.resolve(null)},init:()=>Promise.resolve()}};\n" +
+        "window.gdsdk=window.gdsdk||{showAd:()=>Promise.resolve(),preloadAd:()=>Promise.resolve(),play:()=>{}};\n" +
+        "window.GD_OPTIONS=window.GD_OPTIONS||{onEvent:()=>{}};\n" +
+        "window.famobi=window.famobi||{hasFeature:()=>false,showAd:(cb)=>{if(cb)cb();},rewardedAd:(cb)=>{if(cb)cb(true);}};\n" +
+        "window.adsbygoogle=window.adsbygoogle||[];\n";
+      if (doc.head) doc.head.insertBefore(shim, doc.head.firstChild);
+      else if (doc.documentElement) doc.documentElement.insertBefore(shim, doc.documentElement.firstChild);
       return new TextEncoder().encode((/<!doctype/i.test(new TextDecoder().decode(rec.data).slice(0, 200)) ? "<!DOCTYPE html>\n" : "") + doc.documentElement.outerHTML);
     };
     for (const rec of htmlRecs) rec.data = relink(rec);
@@ -1688,23 +1730,86 @@
       "Atlanan: " + skipped + " (HTTP hatası / robots / kapsam)\n" +
       (kaynakOzet.dosya ? "Orijinal kaynak (source map): " + kaynakOzet.dosya + " dosya / " + (kaynakOzet.toplam / 1048576).toFixed(2) + " MB\n" : "") +
       (UNL ? "Sınır: yok (ZIP32 teknik tavanı: 65.535 dosya / 4 GB)\n" : "") +
-      "\nGezinme: index.html dosyasını açın.\n" +
-      "\n🎮 GÖMÜLÜ OYUNLAR VE MEDYA:\n" +
-      "HTML5 oyunları (Phaser/Canvas/WebGL/WASM) ve video oynatıcıları tarayıcı CORS güvenlik kuralları gereği\n" +
-      "çift tıklanarak ('file://') açıldığında engellenebilir.\n" +
-      "Çevrimdışı sorunsuz çalıştırmak için terminalde yerel sunucu başlatın:\n" +
-      "  Python: python3 -m http.server 8080   (tarayıcıda http://localhost:8080)\n" +
-      "  Node.js: npx serve .\n" +
+      "\n🚀 TEK TIKLA BAŞLATMA:\n" +
+      "  Windows: Arşivi klasöre çıkarıp 'oyna.bat' dosyasına çift tıklayın.\n" +
+      "  Mac / Linux: Terminalde 'bash oyna.sh' çalıştırın veya çift tıklayın.\n" +
+      "  (Otomatik yerel web sunucusu açılır ve tarayıcınızda oyunu başlatır)\n" +
+      "\nManuel Gezinme: index.html dosyasını açın.\n" +
       "\nNot: Klonlanan içerik telif hakkı sahibine aittir; yalnızca inceleme/arşiv/öğrenme amaçlıdır.\n";
     const readmeBytes = new TextEncoder().encode(readme);
 
+    const oynaBat = "@echo off\r\n" +
+      "title MirrorLab Cevrimdisi Baslatici\r\n" +
+      "echo ======================================================\r\n" +
+      "echo   MirrorLab Yerel Cevrimdisi Sunucu Baslatiliyor...\r\n" +
+      "echo ======================================================\r\n" +
+      "cd /d \"%~dp0\"\r\n" +
+      "where python >nul 2>nul\r\n" +
+      "if %errorlevel% equ 0 (\r\n" +
+      "  echo Python bulundu: http://localhost:8080 aciliyor...\r\n" +
+      "  start \"\" http://localhost:8080\r\n" +
+      "  python -m http.server 8080\r\n" +
+      "  goto son\r\n" +
+      ")\r\n" +
+      "where py >nul 2>nul\r\n" +
+      "if %errorlevel% equ 0 (\r\n" +
+      "  echo Python Launcher: http://localhost:8080 aciliyor...\r\n" +
+      "  start \"\" http://localhost:8080\r\n" +
+      "  py -m http.server 8080\r\n" +
+      "  goto son\r\n" +
+      ")\r\n" +
+      "where npx >nul 2>nul\r\n" +
+      "if %errorlevel% equ 0 (\r\n" +
+      "  echo Node.js bulundu: http://localhost:8080 aciliyor...\r\n" +
+      "  start \"\" http://localhost:8080\r\n" +
+      "  npx --yes serve -p 8080 .\r\n" +
+      "  goto son\r\n" +
+      ")\r\n" +
+      "echo [UYARI] Python veya Node.js bulunamadi, index.html dogrudan aciliyor...\r\n" +
+      "start \"\" index.html\r\n" +
+      ":son\r\n" +
+      "pause\r\n";
+
+    const oynaSh = "#!/usr/bin/env bash\n" +
+      "cd \"$(dirname \"$0\")\"\n" +
+      "echo \"======================================================\"\n" +
+      "echo \"  MirrorLab Çevrimdışı Sunucu Başlatılıyor...\"\n" +
+      "echo \"======================================================\"\n" +
+      "PORT=8080\n" +
+      "open_url() {\n" +
+      "  sleep 1\n" +
+      "  if command -v xdg-open >/dev/null 2>&1; then xdg-open \"http://localhost:$PORT\";\n" +
+      "  elif command -v open >/dev/null 2>&1; then open \"http://localhost:$PORT\"; fi\n" +
+      "}\n" +
+      "if command -v python3 >/dev/null 2>&1; then\n" +
+      "  echo \"Python 3: http://localhost:$PORT\"\n" +
+      "  open_url &\n" +
+      "  python3 -m http.server \"$PORT\"\n" +
+      "elif command -v python >/dev/null 2>&1; then\n" +
+      "  echo \"Python: http://localhost:$PORT\"\n" +
+      "  open_url &\n" +
+      "  python -m http.server \"$PORT\"\n" +
+      "elif command -v npx >/dev/null 2>&1; then\n" +
+      "  echo \"Node.js: http://localhost:$PORT\"\n" +
+      "  open_url &\n" +
+      "  npx --yes serve -p \"$PORT\" .\n" +
+      "else\n" +
+      "  echo \"[UYARI] Python veya Node.js bulunamadı. index.html açılıyor...\"\n" +
+      "  if command -v xdg-open >/dev/null 2>&1; then xdg-open index.html; elif command -v open >/dev/null 2>&1; then open index.html; fi\n" +
+      "fi\n";
+
+    const oynaBatBytes = new TextEncoder().encode(oynaBat);
+    const oynaShBytes = new TextEncoder().encode(oynaSh);
+
     /* 4) ZIP */
-    log("[] ZIP yazılıyor (" + (pages + assets + 2 + (kaynakOzet.dosya || 0)) + " dosya)…" + (kaynakOzet.dosya ? " · :: " + kaynakOzet.dosya + " orijinal kaynak" : ""));
+    log("[] ZIP yazılıyor (" + (pages + assets + 4 + (kaynakOzet.dosya || 0)) + " dosya)…" + (kaynakOzet.dosya ? " · :: " + kaynakOzet.dosya + " orijinal kaynak" : ""));
     setStat("ZIP paketleniyor…");
     let toplamBayt = 0, indirmeUrl = null;
     if (sink) {
       await sink.put("index.html", girisBytes);
       await sink.put("README.txt", readmeBytes);
+      await sink.put("oyna.bat", oynaBatBytes);
+      await sink.put("oyna.sh", oynaShBytes);
       for (const rec of htmlRecs) await sink.put(rec.name, rec.data);
       toplamBayt = sink.bytes;
       await sink.close();
@@ -1714,6 +1819,7 @@
       const dl = $("#dlZip"); if (dl) { dl.disabled = true; dl.textContent = "✓ diske kaydedildi"; }
     } else {
       const all = [{ name: "index.html", data: girisBytes }, { name: "README.txt", data: readmeBytes },
+        { name: "oyna.bat", data: oynaBatBytes }, { name: "oyna.sh", data: oynaShBytes },
         ...files.filter(f => !f.streamed).map(f => ({ name: f.name, data: f.data })),
         ...htmlRecs.map(f => ({ name: f.name, data: f.data }))];
       const zip = await zipStore(all);
@@ -1728,6 +1834,17 @@
     }
 
     state.mirrorSeeds = null;
+    const sBtn = $("#surgeDeployBtn");
+    if (sBtn) {
+      sBtn.disabled = false;
+      sBtn.onclick = () => {
+        let clean = "ayna-kopya";
+        try { clean = new URL(seed).hostname.replace(/[^a-z0-9]/g, ""); } catch(e){}
+        const cmd = "npx surge . " + clean + ".surge.sh";
+        try { navigator.clipboard.writeText(cmd); } catch(e){}
+        alert("🚀 Surge Tek Tıkla Yayın Komutu Panoya Kopyalandı!\n\nİndirilen ZIP arşivini açıp klasörün içindeyken terminale şu komutu yapıştırın:\n" + cmd + "\n\n(Surge hesabı gerekirse terminalde anında e-posta sorar ve ücretsiz yayınlar)");
+      };
+    }
     const stopBtn2 = $("#stopCrawl"); if (stopBtn2) stopBtn2.disabled = true;
     if (pauseBtn) { pauseBtn.disabled = true; pauseBtn.textContent = "⏸ Duraklat"; }
     if (typeof oturumSil === "function" && !stopNow()) { try { oturumSil(); } catch (e) {} }
@@ -2420,6 +2537,54 @@
 
     return bulunan;
   }
+
+  /* ── 6) HASSAS VERİ & GİZLİ API TARAYICISI (Secret Scanner) ──────────── */
+  function derinSecretTara(ctx) {
+    const H = ctx.html || "", U = ctx.urlMetni || "", B = JSON.stringify(ctx.basliklar || {});
+    const tumMetin = H + "\n" + U + "\n" + B;
+    const bulgular = [];
+    const gorulen = new Set();
+    const ekle = (tur, baslik, deger, seviye, aciklama) => {
+      const d = String(deger || "").trim();
+      if (!d || gorulen.has(tur + ":" + d)) return;
+      gorulen.add(tur + ":" + d);
+      bulgular.push({ tur, baslik, deger: d.length > 70 ? d.slice(0, 67) + "…" : d, tamDeger: d, seviye, aciklama });
+    };
+
+    // Firebase
+    const mFb = tumMetin.match(/AIzaSy[A-Za-z0-9_-]{33}/g);
+    if (mFb) mFb.forEach(k => ekle("Firebase", "Firebase Web API Key", k, "orta", "İstemci tarafı Firebase / Google Cloud anahtarı."));
+    const mFbDb = tumMetin.match(/https:\/\/[a-z0-9-]+\.firebaseio\.com/gi);
+    if (mFbDb) mFbDb.forEach(u => ekle("Firebase", "Firebase Realtime DB URL", u, "orta", "Veritabanı erişim noktası."));
+
+    // Google Maps / Cloud API
+    const mGmap = tumMetin.match(/AIza[0-9A-Za-z-_]{35}/g);
+    if (mGmap) mGmap.forEach(k => { if (!mFb || !mFb.includes(k)) ekle("Google Cloud", "Google Maps/Cloud API Key", k, "orta", "Harita veya bulut servisi anahtarı."); });
+
+    // AWS Access Key & S3 Buckets
+    const mAws = tumMetin.match(/AKIA[0-9A-Z]{16}/g);
+    if (mAws) mAws.forEach(k => ekle("AWS", "AWS Access Key ID", k, "kotu", "Hassas AWS IAM erişim kimliği!"));
+    const mS3 = tumMetin.match(/https?:\/\/[a-zA-Z0-9.-]+\.s3[a-zA-Z0-9.-]*\.amazonaws\.com\/[^\s"'<>]+/gi);
+    if (mS3) mS3.forEach(b => ekle("AWS S3", "S3 Depolama Kovası (Bucket)", b.split("?")[0], "bilgi", "Herkese açık S3 varlığı veya veri deposu."));
+
+    // Stripe
+    const mStripe = tumMetin.match(/pk_(?:live|test)_[0-9a-zA-Z]{24,99}/g);
+    if (mStripe) mStripe.forEach(k => ekle("Stripe", "Stripe Yayınlanabilir Anahtar", k, "bilgi", "Stripe ödeme altyapısı istemci belirteci."));
+
+    // JWT (JSON Web Token)
+    const mJwt = tumMetin.match(/eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{10,}/g);
+    if (mJwt) mJwt.forEach(j => ekle("JWT", "Oturum / Yetki Belirteci (JWT)", j, "orta", "Kaynak koda gömülü kimlik/oturum belirteci."));
+
+    // Dahili IP / Localhost referansı
+    const mIp = tumMetin.match(/\b(?:192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|localhost:\d{2,5})\b/g);
+    if (mIp) [...new Set(mIp)].forEach(ip => ekle("Dahili Ağ", "Yerel/Özel Ağ Referansı", ip, "orta", "Üretim kodunda unutulmuş dahili sunucu veya geliştirme adresi."));
+
+    // Sentry DSN
+    const mSentry = tumMetin.match(/https:\/\/[a-f0-9]{32}@[^/]+\/\d+/g);
+    if (mSentry) mSentry.forEach(s => ekle("Sentry", "Sentry Hata Takip DSN", s, "bilgi", "Hata kayıt servisi istemci adresi."));
+
+    return bulgular;
+  }
   if (typeof window !== "undefined") {
     window.derinMedyaOyunTara = derinMedyaOyunTara;
     window.klonlaOyun = function(hedefUrl) {
@@ -2468,14 +2633,15 @@
     const guvenlik = basR.ok ? derinGuvenlikDegerlendir(basR.headers, basR.status) : null;
     const oa = derinOpenApi(d);
     const medyaOyun = derinMedyaOyunTara({ html, urlMetni, url: sayfaUrl });
+    const secrets = derinSecretTara({ html, urlMetni, basliklar: basR.headers || {} });
 
     const nokta = (durum) => durum === "iyi" ? "✓" : durum === "orta" ? "!" : durum === "kotu" ? "x" : "•";
     const renk = (durum) => durum === "iyi" ? DERIN_RENK.iyi : durum === "orta" ? DERIN_RENK.orta : durum === "kotu" ? DERIN_RENK.kotu : DERIN_RENK.notr;
 
     let h = '<div class="card" id="derinKart" style="border-left:4px solid #ffd479">' +
       '<div class="row" style="align-items:center"><h3 style="margin:0">:: Tersine mühendislik paketi (REA derinliği)</h3><div class="spacer"></div>' +
-      '<span class="hint">' + (medyaOyun.length ? '5' : '4') + ' katman · kanıtlı</span></div>' +
-      '<div class="sub">Teknoloji sürümleri, güvenlik duruşu, gömülü oyun/medya, API şeması ve kaynak kod — hepsi gözlemlenen kanıtlardan çıkarılır.</div>';
+      '<span class="hint">' + (medyaOyun.length ? '6' : '5') + ' katman · kanıtlı</span></div>' +
+      '<div class="sub">Teknoloji sürümleri, güvenlik duruşu, gizli API anahtarları, gömülü oyun/medya, API şeması ve kaynak kod — hepsi gözlemlenen kanıtlardan çıkarılır.</div>';
 
     /* 0) gömülü oyun ve medya çıkarıcı (varsa en üstte) */
     if (medyaOyun.length) {
@@ -2523,6 +2689,21 @@
         : 'Kritik eksik görünmüyor.') + '</div>';
       h += '<div class="sub">Ham başlıklar <code class="k">/api/hdr</code> ile hedefin kendi yanıtından okundu' + (basR.status ? ' (HTTP ' + basR.status + ')' : '') + '.</div>';
     } else h += '<div class="sub">' + dk((basR && basR.hata) || "hedef yanıt vermedi") + '</div>';
+    h += '</details>';
+
+    /* 2.5) gizli API anahtarları ve hassas veriler */
+    h += '<details ' + (secrets.length ? 'open' : '') + ' style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">🔍 Gizli API & Hassas Veri Tarayıcısı <span class="hint">' + secrets.length + ' bulgu</span></summary>';
+    if (secrets.length) {
+      h += '<div class="scroll"><table><tr><th style="width:120px">servis</th><th>açıklama</th><th style="width:75px">seviye</th><th>değer</th><th style="width:65px">eylem</th></tr>' +
+        secrets.map((s, idx) => '<tr><td><b>' + dk(s.tur) + '</b></td><td class="hint">' + dk(s.baslik) + '</td>' +
+          '<td><span class="badge ' + (s.seviye === "kotu" ? "warn" : s.seviye === "orta" ? "pink" : "pur") + '">' + (s.seviye === "kotu" ? "Kritik" : s.seviye === "orta" ? "Orta" : "Bilgi") + '</span></td>' +
+          '<td class="mono hint" style="word-break:break-all;font-size:11px">' + dk(s.deger) + '</td>' +
+          '<td><button class="btn sm ghost" onclick="navigator.clipboard.writeText(\'' + dk(s.tamDeger).replace(/'/g, "\\'") + '\');this.textContent=\'✓\';">Kopya</button></td></tr>').join("") +
+        '</table></div>';
+      h += '<div class="sub" style="margin-top:8px">Kaynak kodda unutulmuş API anahtarları, Firebase/AWS endpointleri veya oturum belirteçleri.</div>';
+    } else {
+      h += '<div class="sub">HTML ve betiklerde bilinen şablonlara uyan açık API anahtarı veya hassas belirteç bulunamadı.</div>';
+    }
     h += '</details>';
 
     /* 3) API taslağı */
@@ -2832,13 +3013,82 @@
     }
     return parca.join(" > ");
   }
+
+  function htmlToJsx(h) {
+    if (!h) return "";
+    let s = h
+      .replace(/\sclass=/g, ' className=')
+      .replace(/\sfor=/g, ' htmlFor=')
+      .replace(/\sautocomplete=/gi, ' autoComplete=')
+      .replace(/\s(tabindex|rowspan|colspan|readonly|maxlength)=/gi, (m, a) => ' ' + a.toLowerCase().replace(/^(.)(.*)$/, (x, y, z) => y + z[0].toUpperCase() + z.slice(1)) + '=');
+    s = s.replace(/<(img|input|br|hr|meta|link)([^>]*?)(?<!\/)>/gi, '<$1$2 />');
+    return s;
+  }
+
+  function stylesToTailwind(cs) {
+    const tw = [];
+    const d = cs.getPropertyValue("display");
+    if (d === "flex") tw.push("flex");
+    else if (d === "grid") tw.push("grid");
+    else if (d === "inline-block") tw.push("inline-block");
+    else if (d === "none") tw.push("hidden");
+
+    if (d === "flex") {
+      const fdir = cs.getPropertyValue("flex-direction");
+      if (fdir === "column") tw.push("flex-col");
+      const jc = cs.getPropertyValue("justify-content");
+      if (jc.includes("center")) tw.push("justify-center");
+      else if (jc.includes("space-between")) tw.push("justify-between");
+      const ai = cs.getPropertyValue("align-items");
+      if (ai.includes("center")) tw.push("items-center");
+    }
+
+    const pos = cs.getPropertyValue("position");
+    if (pos === "relative") tw.push("relative");
+    else if (pos === "absolute") tw.push("absolute");
+    else if (pos === "fixed") tw.push("fixed");
+
+    const fw = parseInt(cs.getPropertyValue("font-weight"), 10);
+    if (fw >= 700) tw.push("font-bold");
+    else if (fw >= 600) tw.push("font-semibold");
+    else if (fw >= 500) tw.push("font-medium");
+
+    const fz = parseFloat(cs.getPropertyValue("font-size"));
+    if (fz >= 32) tw.push("text-3xl");
+    else if (fz >= 24) tw.push("text-2xl");
+    else if (fz >= 20) tw.push("text-xl");
+    else if (fz >= 18) tw.push("text-lg");
+    else if (fz <= 12) tw.push("text-xs");
+    else if (fz <= 14) tw.push("text-sm");
+
+    const br = parseFloat(cs.getPropertyValue("border-radius"));
+    if (br >= 999) tw.push("rounded-full");
+    else if (br >= 16) tw.push("rounded-2xl");
+    else if (br >= 12) tw.push("rounded-xl");
+    else if (br >= 8) tw.push("rounded-lg");
+    else if (br >= 4) tw.push("rounded");
+
+    const pad = parseFloat(cs.getPropertyValue("padding-top"));
+    if (pad >= 24) tw.push("p-6");
+    else if (pad >= 16) tw.push("p-4");
+    else if (pad >= 8) tw.push("p-2");
+
+    const bs = cs.getPropertyValue("box-shadow");
+    if (bs && bs !== "none") tw.push("shadow-md");
+
+    return tw.join(" ") || "relative";
+  }
+
   function denetciGoster(el, pencere) {
     const kutu = $("#denetciInfo"); if (!kutu || !el) return;
     const cs = pencere.getComputedStyle(el);
     const r = el.getBoundingClientRect();
     const kisa = (s, n) => { s = String(s == null ? "" : s).replace(/\s+/g, " ").trim(); return s.length > (n || 60) ? s.slice(0, n || 60) + "…" : s; };
     const html = kisa(el.outerHTML, 420);
-    const ozellik = ["font-family", "font-size", "font-weight", "color", "background-color", "padding", "margin", "border-radius", "display", "position", "width", "height", "flex", "grid-template-columns", "box-shadow", "z-index"];
+    const fullHtml = el.outerHTML;
+    const jsxCode = htmlToJsx(fullHtml);
+    const twClasses = stylesToTailwind(cs);
+
     kutu.innerHTML = '<div class="card"><div class="row"><h3 style="margin:0">:: ' + dk(el.tagName.toLowerCase()) + (el.id ? "#" + dk(el.id) : "") + '</h3>' +
       '<div class="spacer"></div><span class="hint">tıkla -> başka öğe · Esc -> temizle</span></div>' +
       '<div class="sub" style="margin-top:6px">seçici: <code class="k">' + dk(denetciSeciciYolu(el)) + '</code></div>' +
@@ -2847,14 +3097,34 @@
         '<div class="stat"><div class="k">Konum (x, y)</div><div class="v" style="font-size:15px">' + Math.round(r.left) + ", " + Math.round(r.top) + '</div></div>' +
         '<div class="stat"><div class="k">Sınıflar</div><div class="v" style="font-size:13px">' + dk(kisa(el.className, 40) || "—") + '</div></div>' +
       '</div>' +
+      '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn sm primary" id="denetciCopyJsx">⚛️ React JSX Kopyala</button>' +
+        '<button class="btn sm" id="denetciCopyTw">🎨 Tailwind Kopyala</button>' +
+        '<button class="btn sm" id="denetciCopyHtml">📋 HTML Kopyala</button>' +
+      '</div>' +
       '<div style="margin-top:10px"><b>Yerleşim:</b><div class="scroll" style="margin-top:6px"><table>' +
         ["display", "position", "margin", "padding", "border-radius", "flex", "grid-template-columns", "z-index"].map(p => '<tr><td style="width:190px">' + p + '</td><td class="hint">' + dk(cs.getPropertyValue(p) || "—") + '</td></tr>').join("") +
       '</table></div></div>' +
       '<div style="margin-top:10px"><b>Metin ve renk:</b><div class="scroll" style="margin-top:6px"><table>' +
         ["font-family", "font-size", "font-weight", "line-height", "color", "background-color", "box-shadow"].map(p => '<tr><td style="width:190px">' + p + '</td><td class="hint">' + dk(cs.getPropertyValue(p) || "—") + '</td></tr>').join("") +
       '</table></div></div>' +
+      '<div style="margin-top:10px"><b>Tailwind Tahmini</b><div class="mono" style="padding:8px;background:#0d0902;border-radius:8px;font-size:12px;color:#7dfa9b;margin-top:4px">' + dk(twClasses) + '</div></div>' +
       '<div style="margin-top:10px"><b>HTML parçası</b><pre class="scroll" style="max-height:150px;font-size:12px;padding:10px;background:#0d0902;border-radius:10px;margin-top:6px">' + dk(html) + '</pre></div>' +
       '<div class="sub" style="margin-top:8px">Denetçi, klonlanmış sayfanın <b>çevrimdışı kopyası</b> üzerinde çalışır; değerler o andaki hesaplanmış (computed) stillerdir.</div></div>';
+
+    const bJsx = $("#denetciCopyJsx");
+    if (bJsx) bJsx.onclick = async () => {
+      try { await navigator.clipboard.writeText(jsxCode); bJsx.textContent = "✓ JSX Kopyalandı"; setTimeout(() => { bJsx.textContent = "⚛️ React JSX Kopyala"; }, 2000); } catch(e){}
+    };
+    const bTw = $("#denetciCopyTw");
+    if (bTw) bTw.onclick = async () => {
+      try { await navigator.clipboard.writeText(twClasses); bTw.textContent = "✓ Tailwind Kopyalandı"; setTimeout(() => { bTw.textContent = "🎨 Tailwind Kopyala"; }, 2000); } catch(e){}
+    };
+    const bHtml = $("#denetciCopyHtml");
+    if (bHtml) bHtml.onclick = async () => {
+      try { await navigator.clipboard.writeText(fullHtml); bHtml.textContent = "✓ HTML Kopyalandı"; setTimeout(() => { bHtml.textContent = "📋 HTML Kopyala"; }, 2000); } catch(e){}
+    };
+
     // denetleyici özeti: tasarım sistemi sekmesine köprü
     kutu.querySelectorAll("[data-git]").forEach(b => b.onclick = () => b.dataset.git && tabClick(+b.dataset.git));
   }

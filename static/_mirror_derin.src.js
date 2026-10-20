@@ -535,6 +535,54 @@
 
     return bulunan;
   }
+
+  /* ── 6) HASSAS VERİ & GİZLİ API TARAYICISI (Secret Scanner) ──────────── */
+  function derinSecretTara(ctx) {
+    const H = ctx.html || "", U = ctx.urlMetni || "", B = JSON.stringify(ctx.basliklar || {});
+    const tumMetin = H + "\n" + U + "\n" + B;
+    const bulgular = [];
+    const gorulen = new Set();
+    const ekle = (tur, baslik, deger, seviye, aciklama) => {
+      const d = String(deger || "").trim();
+      if (!d || gorulen.has(tur + ":" + d)) return;
+      gorulen.add(tur + ":" + d);
+      bulgular.push({ tur, baslik, deger: d.length > 70 ? d.slice(0, 67) + "…" : d, tamDeger: d, seviye, aciklama });
+    };
+
+    // Firebase
+    const mFb = tumMetin.match(/AIzaSy[A-Za-z0-9_-]{33}/g);
+    if (mFb) mFb.forEach(k => ekle("Firebase", "Firebase Web API Key", k, "orta", "İstemci tarafı Firebase / Google Cloud anahtarı."));
+    const mFbDb = tumMetin.match(/https:\/\/[a-z0-9-]+\.firebaseio\.com/gi);
+    if (mFbDb) mFbDb.forEach(u => ekle("Firebase", "Firebase Realtime DB URL", u, "orta", "Veritabanı erişim noktası."));
+
+    // Google Maps / Cloud API
+    const mGmap = tumMetin.match(/AIza[0-9A-Za-z-_]{35}/g);
+    if (mGmap) mGmap.forEach(k => { if (!mFb || !mFb.includes(k)) ekle("Google Cloud", "Google Maps/Cloud API Key", k, "orta", "Harita veya bulut servisi anahtarı."); });
+
+    // AWS Access Key & S3 Buckets
+    const mAws = tumMetin.match(/AKIA[0-9A-Z]{16}/g);
+    if (mAws) mAws.forEach(k => ekle("AWS", "AWS Access Key ID", k, "kotu", "Hassas AWS IAM erişim kimliği!"));
+    const mS3 = tumMetin.match(/https?:\/\/[a-zA-Z0-9.-]+\.s3[a-zA-Z0-9.-]*\.amazonaws\.com\/[^\s"'<>]+/gi);
+    if (mS3) mS3.forEach(b => ekle("AWS S3", "S3 Depolama Kovası (Bucket)", b.split("?")[0], "bilgi", "Herkese açık S3 varlığı veya veri deposu."));
+
+    // Stripe
+    const mStripe = tumMetin.match(/pk_(?:live|test)_[0-9a-zA-Z]{24,99}/g);
+    if (mStripe) mStripe.forEach(k => ekle("Stripe", "Stripe Yayınlanabilir Anahtar", k, "bilgi", "Stripe ödeme altyapısı istemci belirteci."));
+
+    // JWT (JSON Web Token)
+    const mJwt = tumMetin.match(/eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{10,}/g);
+    if (mJwt) mJwt.forEach(j => ekle("JWT", "Oturum / Yetki Belirteci (JWT)", j, "orta", "Kaynak koda gömülü kimlik/oturum belirteci."));
+
+    // Dahili IP / Localhost referansı
+    const mIp = tumMetin.match(/\b(?:192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|localhost:\d{2,5})\b/g);
+    if (mIp) [...new Set(mIp)].forEach(ip => ekle("Dahili Ağ", "Yerel/Özel Ağ Referansı", ip, "orta", "Üretim kodunda unutulmuş dahili sunucu veya geliştirme adresi."));
+
+    // Sentry DSN
+    const mSentry = tumMetin.match(/https:\/\/[a-f0-9]{32}@[^/]+\/\d+/g);
+    if (mSentry) mSentry.forEach(s => ekle("Sentry", "Sentry Hata Takip DSN", s, "bilgi", "Hata kayıt servisi istemci adresi."));
+
+    return bulgular;
+  }
   if (typeof window !== "undefined") {
     window.derinMedyaOyunTara = derinMedyaOyunTara;
     window.klonlaOyun = function(hedefUrl) {
@@ -583,14 +631,15 @@
     const guvenlik = basR.ok ? derinGuvenlikDegerlendir(basR.headers, basR.status) : null;
     const oa = derinOpenApi(d);
     const medyaOyun = derinMedyaOyunTara({ html, urlMetni, url: sayfaUrl });
+    const secrets = derinSecretTara({ html, urlMetni, basliklar: basR.headers || {} });
 
     const nokta = (durum) => durum === "iyi" ? "✓" : durum === "orta" ? "!" : durum === "kotu" ? "x" : "•";
     const renk = (durum) => durum === "iyi" ? DERIN_RENK.iyi : durum === "orta" ? DERIN_RENK.orta : durum === "kotu" ? DERIN_RENK.kotu : DERIN_RENK.notr;
 
     let h = '<div class="card" id="derinKart" style="border-left:4px solid #ffd479">' +
       '<div class="row" style="align-items:center"><h3 style="margin:0">:: Tersine mühendislik paketi (REA derinliği)</h3><div class="spacer"></div>' +
-      '<span class="hint">' + (medyaOyun.length ? '5' : '4') + ' katman · kanıtlı</span></div>' +
-      '<div class="sub">Teknoloji sürümleri, güvenlik duruşu, gömülü oyun/medya, API şeması ve kaynak kod — hepsi gözlemlenen kanıtlardan çıkarılır.</div>';
+      '<span class="hint">' + (medyaOyun.length ? '6' : '5') + ' katman · kanıtlı</span></div>' +
+      '<div class="sub">Teknoloji sürümleri, güvenlik duruşu, gizli API anahtarları, gömülü oyun/medya, API şeması ve kaynak kod — hepsi gözlemlenen kanıtlardan çıkarılır.</div>';
 
     /* 0) gömülü oyun ve medya çıkarıcı (varsa en üstte) */
     if (medyaOyun.length) {
@@ -638,6 +687,21 @@
         : 'Kritik eksik görünmüyor.') + '</div>';
       h += '<div class="sub">Ham başlıklar <code class="k">/api/hdr</code> ile hedefin kendi yanıtından okundu' + (basR.status ? ' (HTTP ' + basR.status + ')' : '') + '.</div>';
     } else h += '<div class="sub">' + dk((basR && basR.hata) || "hedef yanıt vermedi") + '</div>';
+    h += '</details>';
+
+    /* 2.5) gizli API anahtarları ve hassas veriler */
+    h += '<details ' + (secrets.length ? 'open' : '') + ' style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">🔍 Gizli API & Hassas Veri Tarayıcısı <span class="hint">' + secrets.length + ' bulgu</span></summary>';
+    if (secrets.length) {
+      h += '<div class="scroll"><table><tr><th style="width:120px">servis</th><th>açıklama</th><th style="width:75px">seviye</th><th>değer</th><th style="width:65px">eylem</th></tr>' +
+        secrets.map((s, idx) => '<tr><td><b>' + dk(s.tur) + '</b></td><td class="hint">' + dk(s.baslik) + '</td>' +
+          '<td><span class="badge ' + (s.seviye === "kotu" ? "warn" : s.seviye === "orta" ? "pink" : "pur") + '">' + (s.seviye === "kotu" ? "Kritik" : s.seviye === "orta" ? "Orta" : "Bilgi") + '</span></td>' +
+          '<td class="mono hint" style="word-break:break-all;font-size:11px">' + dk(s.deger) + '</td>' +
+          '<td><button class="btn sm ghost" onclick="navigator.clipboard.writeText(\'' + dk(s.tamDeger).replace(/'/g, "\\'") + '\');this.textContent=\'✓\';">Kopya</button></td></tr>').join("") +
+        '</table></div>';
+      h += '<div class="sub" style="margin-top:8px">Kaynak kodda unutulmuş API anahtarları, Firebase/AWS endpointleri veya oturum belirteçleri.</div>';
+    } else {
+      h += '<div class="sub">HTML ve betiklerde bilinen şablonlara uyan açık API anahtarı veya hassas belirteç bulunamadı.</div>';
+    }
     h += '</details>';
 
     /* 3) API taslağı */

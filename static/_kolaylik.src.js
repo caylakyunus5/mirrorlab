@@ -230,13 +230,82 @@
     }
     return parca.join(" > ");
   }
+
+  function htmlToJsx(h) {
+    if (!h) return "";
+    let s = h
+      .replace(/\sclass=/g, ' className=')
+      .replace(/\sfor=/g, ' htmlFor=')
+      .replace(/\sautocomplete=/gi, ' autoComplete=')
+      .replace(/\s(tabindex|rowspan|colspan|readonly|maxlength)=/gi, (m, a) => ' ' + a.toLowerCase().replace(/^(.)(.*)$/, (x, y, z) => y + z[0].toUpperCase() + z.slice(1)) + '=');
+    s = s.replace(/<(img|input|br|hr|meta|link)([^>]*?)(?<!\/)>/gi, '<$1$2 />');
+    return s;
+  }
+
+  function stylesToTailwind(cs) {
+    const tw = [];
+    const d = cs.getPropertyValue("display");
+    if (d === "flex") tw.push("flex");
+    else if (d === "grid") tw.push("grid");
+    else if (d === "inline-block") tw.push("inline-block");
+    else if (d === "none") tw.push("hidden");
+
+    if (d === "flex") {
+      const fdir = cs.getPropertyValue("flex-direction");
+      if (fdir === "column") tw.push("flex-col");
+      const jc = cs.getPropertyValue("justify-content");
+      if (jc.includes("center")) tw.push("justify-center");
+      else if (jc.includes("space-between")) tw.push("justify-between");
+      const ai = cs.getPropertyValue("align-items");
+      if (ai.includes("center")) tw.push("items-center");
+    }
+
+    const pos = cs.getPropertyValue("position");
+    if (pos === "relative") tw.push("relative");
+    else if (pos === "absolute") tw.push("absolute");
+    else if (pos === "fixed") tw.push("fixed");
+
+    const fw = parseInt(cs.getPropertyValue("font-weight"), 10);
+    if (fw >= 700) tw.push("font-bold");
+    else if (fw >= 600) tw.push("font-semibold");
+    else if (fw >= 500) tw.push("font-medium");
+
+    const fz = parseFloat(cs.getPropertyValue("font-size"));
+    if (fz >= 32) tw.push("text-3xl");
+    else if (fz >= 24) tw.push("text-2xl");
+    else if (fz >= 20) tw.push("text-xl");
+    else if (fz >= 18) tw.push("text-lg");
+    else if (fz <= 12) tw.push("text-xs");
+    else if (fz <= 14) tw.push("text-sm");
+
+    const br = parseFloat(cs.getPropertyValue("border-radius"));
+    if (br >= 999) tw.push("rounded-full");
+    else if (br >= 16) tw.push("rounded-2xl");
+    else if (br >= 12) tw.push("rounded-xl");
+    else if (br >= 8) tw.push("rounded-lg");
+    else if (br >= 4) tw.push("rounded");
+
+    const pad = parseFloat(cs.getPropertyValue("padding-top"));
+    if (pad >= 24) tw.push("p-6");
+    else if (pad >= 16) tw.push("p-4");
+    else if (pad >= 8) tw.push("p-2");
+
+    const bs = cs.getPropertyValue("box-shadow");
+    if (bs && bs !== "none") tw.push("shadow-md");
+
+    return tw.join(" ") || "relative";
+  }
+
   function denetciGoster(el, pencere) {
     const kutu = $("#denetciInfo"); if (!kutu || !el) return;
     const cs = pencere.getComputedStyle(el);
     const r = el.getBoundingClientRect();
     const kisa = (s, n) => { s = String(s == null ? "" : s).replace(/\s+/g, " ").trim(); return s.length > (n || 60) ? s.slice(0, n || 60) + "…" : s; };
     const html = kisa(el.outerHTML, 420);
-    const ozellik = ["font-family", "font-size", "font-weight", "color", "background-color", "padding", "margin", "border-radius", "display", "position", "width", "height", "flex", "grid-template-columns", "box-shadow", "z-index"];
+    const fullHtml = el.outerHTML;
+    const jsxCode = htmlToJsx(fullHtml);
+    const twClasses = stylesToTailwind(cs);
+
     kutu.innerHTML = '<div class="card"><div class="row"><h3 style="margin:0">:: ' + dk(el.tagName.toLowerCase()) + (el.id ? "#" + dk(el.id) : "") + '</h3>' +
       '<div class="spacer"></div><span class="hint">tıkla -> başka öğe · Esc -> temizle</span></div>' +
       '<div class="sub" style="margin-top:6px">seçici: <code class="k">' + dk(denetciSeciciYolu(el)) + '</code></div>' +
@@ -245,14 +314,34 @@
         '<div class="stat"><div class="k">Konum (x, y)</div><div class="v" style="font-size:15px">' + Math.round(r.left) + ", " + Math.round(r.top) + '</div></div>' +
         '<div class="stat"><div class="k">Sınıflar</div><div class="v" style="font-size:13px">' + dk(kisa(el.className, 40) || "—") + '</div></div>' +
       '</div>' +
+      '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn sm primary" id="denetciCopyJsx">⚛️ React JSX Kopyala</button>' +
+        '<button class="btn sm" id="denetciCopyTw">🎨 Tailwind Kopyala</button>' +
+        '<button class="btn sm" id="denetciCopyHtml">📋 HTML Kopyala</button>' +
+      '</div>' +
       '<div style="margin-top:10px"><b>Yerleşim:</b><div class="scroll" style="margin-top:6px"><table>' +
         ["display", "position", "margin", "padding", "border-radius", "flex", "grid-template-columns", "z-index"].map(p => '<tr><td style="width:190px">' + p + '</td><td class="hint">' + dk(cs.getPropertyValue(p) || "—") + '</td></tr>').join("") +
       '</table></div></div>' +
       '<div style="margin-top:10px"><b>Metin ve renk:</b><div class="scroll" style="margin-top:6px"><table>' +
         ["font-family", "font-size", "font-weight", "line-height", "color", "background-color", "box-shadow"].map(p => '<tr><td style="width:190px">' + p + '</td><td class="hint">' + dk(cs.getPropertyValue(p) || "—") + '</td></tr>').join("") +
       '</table></div></div>' +
+      '<div style="margin-top:10px"><b>Tailwind Tahmini</b><div class="mono" style="padding:8px;background:#0d0902;border-radius:8px;font-size:12px;color:#7dfa9b;margin-top:4px">' + dk(twClasses) + '</div></div>' +
       '<div style="margin-top:10px"><b>HTML parçası</b><pre class="scroll" style="max-height:150px;font-size:12px;padding:10px;background:#0d0902;border-radius:10px;margin-top:6px">' + dk(html) + '</pre></div>' +
       '<div class="sub" style="margin-top:8px">Denetçi, klonlanmış sayfanın <b>çevrimdışı kopyası</b> üzerinde çalışır; değerler o andaki hesaplanmış (computed) stillerdir.</div></div>';
+
+    const bJsx = $("#denetciCopyJsx");
+    if (bJsx) bJsx.onclick = async () => {
+      try { await navigator.clipboard.writeText(jsxCode); bJsx.textContent = "✓ JSX Kopyalandı"; setTimeout(() => { bJsx.textContent = "⚛️ React JSX Kopyala"; }, 2000); } catch(e){}
+    };
+    const bTw = $("#denetciCopyTw");
+    if (bTw) bTw.onclick = async () => {
+      try { await navigator.clipboard.writeText(twClasses); bTw.textContent = "✓ Tailwind Kopyalandı"; setTimeout(() => { bTw.textContent = "🎨 Tailwind Kopyala"; }, 2000); } catch(e){}
+    };
+    const bHtml = $("#denetciCopyHtml");
+    if (bHtml) bHtml.onclick = async () => {
+      try { await navigator.clipboard.writeText(fullHtml); bHtml.textContent = "✓ HTML Kopyalandı"; setTimeout(() => { bHtml.textContent = "📋 HTML Kopyala"; }, 2000); } catch(e){}
+    };
+
     // denetleyici özeti: tasarım sistemi sekmesine köprü
     kutu.querySelectorAll("[data-git]").forEach(b => b.onclick = () => b.dataset.git && tabClick(+b.dataset.git));
   }

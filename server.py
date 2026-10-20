@@ -39,6 +39,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 import zlib
+import tempfile
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote, unquote, urljoin, urlsplit, urlunsplit
@@ -1476,6 +1477,72 @@ def crawl_worker(jid: str, start_url: str, opts: dict):
         for lp, b in files.items():
             out_files.setdefault(lp, b)
 
+        # Çevrimdışı tek tıkla başlatıcılar (oyna.bat & oyna.sh)
+        oyna_bat = (
+            "@echo off\r\n"
+            "title MirrorLab Cevrimdisi Baslatici\r\n"
+            "echo ======================================================\r\n"
+            "echo   MirrorLab Yerel Cevrimdisi Sunucu Baslatiliyor...\r\n"
+            "echo ======================================================\r\n"
+            "cd /d \"%~dp0\"\r\n"
+            "where python >nul 2>nul\r\n"
+            "if %errorlevel% equ 0 (\r\n"
+            "  echo Python bulundu: http://localhost:8080 aciliyor...\r\n"
+            "  start \"\" http://localhost:8080\r\n"
+            "  python -m http.server 8080\r\n"
+            "  goto son\r\n"
+            ")\r\n"
+            "where py >nul 2>nul\r\n"
+            "if %errorlevel% equ 0 (\r\n"
+            "  echo Python Launcher: http://localhost:8080 aciliyor...\r\n"
+            "  start \"\" http://localhost:8080\r\n"
+            "  py -m http.server 8080\r\n"
+            "  goto son\r\n"
+            ")\r\n"
+            "where npx >nul 2>nul\r\n"
+            "if %errorlevel% equ 0 (\r\n"
+            "  echo Node.js bulundu: http://localhost:8080 aciliyor...\r\n"
+            "  start \"\" http://localhost:8080\r\n"
+            "  npx --yes serve -p 8080 .\r\n"
+            "  goto son\r\n"
+            ")\r\n"
+            "echo [UYARI] Python veya Node.js bulunamadi, index.html dogrudan aciliyor...\r\n"
+            "start \"\" index.html\r\n"
+            ":son\r\n"
+            "pause\r\n"
+        )
+        oyna_sh = (
+            "#!/usr/bin/env bash\n"
+            "cd \"$(dirname \"$0\")\"\n"
+            "echo \"======================================================\"\n"
+            "echo \"  MirrorLab Çevrimdışı Sunucu Başlatılıyor...\"\n"
+            "echo \"======================================================\"\n"
+            "PORT=8080\n"
+            "open_url() {\n"
+            "  sleep 1\n"
+            "  if command -v xdg-open >/dev/null 2>&1; then xdg-open \"http://localhost:$PORT\";\n"
+            "  elif command -v open >/dev/null 2>&1; then open \"http://localhost:$PORT\"; fi\n"
+            "}\n"
+            "if command -v python3 >/dev/null 2>&1; then\n"
+            "  echo \"Python 3: http://localhost:$PORT\"\n"
+            "  open_url &\n"
+            "  python3 -m http.server \"$PORT\"\n"
+            "elif command -v python >/dev/null 2>&1; then\n"
+            "  echo \"Python: http://localhost:$PORT\"\n"
+            "  open_url &\n"
+            "  python -m http.server \"$PORT\"\n"
+            "elif command -v npx >/dev/null 2>&1; then\n"
+            "  echo \"Node.js: http://localhost:$PORT\"\n"
+            "  open_url &\n"
+            "  npx --yes serve -p \"$PORT\" .\n"
+            "else\n"
+            "  echo \"[UYARI] Python veya Node.js bulunamadı. index.html açılıyor...\"\n"
+            "  if command -v xdg-open >/dev/null 2>&1; then xdg-open index.html; elif command -v open >/dev/null 2>&1; then open index.html; fi\n"
+            "fi\n"
+        )
+        out_files["oyna.bat"] = oyna_bat.encode("utf-8")
+        out_files["oyna.sh"] = oyna_sh.encode("utf-8")
+
         # ---------------- 5. ZIP ----------------
         report = {
             "kaynak": start_url,
@@ -2009,6 +2076,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._engine_result(d)
         if path == "/api/starterkit":
             return self._starterkit(d)
+        if path == "/api/deploy/surge":
+            return self._deploy_surge(d)
         if path == "/api/export":
             return self.handle_export(d)
         return self.send_json({"ok": False, "error": "bilinmeyen uç nokta"}, 404)
@@ -2209,6 +2278,46 @@ class Handler(BaseHTTPRequestHandler):
         with open(zip_path, "rb") as f:
             blob = f.read()
         return self.send_bytes(200, blob, "application/zip", download=zip_name)
+
+    def _deploy_surge(self, d):
+        jid = d.get("id", "")
+        domain = (d.get("domain", "") or "").strip()
+        if not jid:
+            return self.send_json({"ok": False, "error": "id gerekli"}, 400)
+        with JOBS_LOCK:
+            job = JOBS.get(jid)
+        if not job:
+            return self.send_json({"ok": False, "error": "İş bulunamadı"}, 404)
+        zip_path = job.get("zip")
+        if not zip_path or not os.path.exists(zip_path):
+            return self.send_json({"ok": False, "error": "ZIP arşivi henüz hazır değil"}, 400)
+
+        # Alan adı belirleme
+        if not domain:
+            raw_host = (job.get("result", {}).get("kaynak", "") or "site").split("//")[-1].split("/")[0]
+            clean = re.sub(r"[^a-z0-9-]", "", raw_host.lower())
+            domain = f"mirrorlab-{clean[:20]}-{int(time.time()) % 10000}.surge.sh"
+        elif not domain.endswith(".surge.sh"):
+            domain = f"{domain}.surge.sh"
+
+        tdir = tempfile.mkdtemp(prefix="surge_deploy_")
+        try:
+            with zipfile.ZipFile(zip_path, "r") as z:
+                z.extractall(tdir)
+
+            cmd = ["surge", tdir, domain]
+            env = os.environ.copy()
+            env["PATH"] = f"/home/user/.local/bin:{env.get('PATH', '')}"
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60, env=env)
+            if res.returncode == 0:
+                live_url = f"https://{domain}"
+                return self.send_json({"ok": True, "url": live_url, "domain": domain, "output": res.stdout})
+            else:
+                return self.send_json({"ok": False, "error": f"Surge hatası: {res.stderr or res.stdout}"}, 500)
+        except Exception as e:
+            return self.send_json({"ok": False, "error": str(e)}, 500)
+        finally:
+            shutil.rmtree(tdir, ignore_errors=True)
 
     # ---------- dışa aktarma ----------
     def handle_export(self, d=None):

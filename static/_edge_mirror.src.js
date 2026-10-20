@@ -740,6 +740,18 @@
         });
         el.setAttribute("srcset", parts.join(", "));
       });
+      /* Game & Ad SDK Shim: çevrimdışı donmaları ve domain kilitlerini aşar */
+      const shim = doc.createElement("script");
+      shim.setAttribute("data-mirrorlab", "game-shim");
+      shim.textContent = "/* MirrorLab Game & Ad SDK Shim */\n" +
+        "window.PokiSDK=window.PokiSDK||{init:()=>Promise.resolve(),initWithVideoHB:()=>Promise.resolve(),commercialBreak:()=>Promise.resolve(),rewardedBreak:()=>Promise.resolve(true),displayAd:()=>{},destroyAd:()=>{},gameLoadingStart:()=>{},gameLoadingFinished:()=>{},gameplayStart:()=>{},gameplayStop:()=>{},happyTime:()=>{},setDebug:()=>{}};\n" +
+        "window.CrazyGames=window.CrazyGames||{SDK:{ad:{requestAd:(t,cb)=>{if(cb&&cb.adFinished)cb.adFinished();},hasAdblock:()=>Promise.resolve(false)},game:{gameplayStart:()=>{},gameplayStop:()=>{},happytime:()=>{},loadingStart:()=>{},loadingStop:()=>{}},user:{isUserAccountAvailable:false,getUser:()=>Promise.resolve(null)},init:()=>Promise.resolve()}};\n" +
+        "window.gdsdk=window.gdsdk||{showAd:()=>Promise.resolve(),preloadAd:()=>Promise.resolve(),play:()=>{}};\n" +
+        "window.GD_OPTIONS=window.GD_OPTIONS||{onEvent:()=>{}};\n" +
+        "window.famobi=window.famobi||{hasFeature:()=>false,showAd:(cb)=>{if(cb)cb();},rewardedAd:(cb)=>{if(cb)cb(true);}};\n" +
+        "window.adsbygoogle=window.adsbygoogle||[];\n";
+      if (doc.head) doc.head.insertBefore(shim, doc.head.firstChild);
+      else if (doc.documentElement) doc.documentElement.insertBefore(shim, doc.documentElement.firstChild);
       return new TextEncoder().encode((/<!doctype/i.test(new TextDecoder().decode(rec.data).slice(0, 200)) ? "<!DOCTYPE html>\n" : "") + doc.documentElement.outerHTML);
     };
     for (const rec of htmlRecs) rec.data = relink(rec);
@@ -767,23 +779,86 @@
       "Atlanan: " + skipped + " (HTTP hatası / robots / kapsam)\n" +
       (kaynakOzet.dosya ? "Orijinal kaynak (source map): " + kaynakOzet.dosya + " dosya / " + (kaynakOzet.toplam / 1048576).toFixed(2) + " MB\n" : "") +
       (UNL ? "Sınır: yok (ZIP32 teknik tavanı: 65.535 dosya / 4 GB)\n" : "") +
-      "\nGezinme: index.html dosyasını açın.\n" +
-      "\n🎮 GÖMÜLÜ OYUNLAR VE MEDYA:\n" +
-      "HTML5 oyunları (Phaser/Canvas/WebGL/WASM) ve video oynatıcıları tarayıcı CORS güvenlik kuralları gereği\n" +
-      "çift tıklanarak ('file://') açıldığında engellenebilir.\n" +
-      "Çevrimdışı sorunsuz çalıştırmak için terminalde yerel sunucu başlatın:\n" +
-      "  Python: python3 -m http.server 8080   (tarayıcıda http://localhost:8080)\n" +
-      "  Node.js: npx serve .\n" +
+      "\n🚀 TEK TIKLA BAŞLATMA:\n" +
+      "  Windows: Arşivi klasöre çıkarıp 'oyna.bat' dosyasına çift tıklayın.\n" +
+      "  Mac / Linux: Terminalde 'bash oyna.sh' çalıştırın veya çift tıklayın.\n" +
+      "  (Otomatik yerel web sunucusu açılır ve tarayıcınızda oyunu başlatır)\n" +
+      "\nManuel Gezinme: index.html dosyasını açın.\n" +
       "\nNot: Klonlanan içerik telif hakkı sahibine aittir; yalnızca inceleme/arşiv/öğrenme amaçlıdır.\n";
     const readmeBytes = new TextEncoder().encode(readme);
 
+    const oynaBat = "@echo off\r\n" +
+      "title MirrorLab Cevrimdisi Baslatici\r\n" +
+      "echo ======================================================\r\n" +
+      "echo   MirrorLab Yerel Cevrimdisi Sunucu Baslatiliyor...\r\n" +
+      "echo ======================================================\r\n" +
+      "cd /d \"%~dp0\"\r\n" +
+      "where python >nul 2>nul\r\n" +
+      "if %errorlevel% equ 0 (\r\n" +
+      "  echo Python bulundu: http://localhost:8080 aciliyor...\r\n" +
+      "  start \"\" http://localhost:8080\r\n" +
+      "  python -m http.server 8080\r\n" +
+      "  goto son\r\n" +
+      ")\r\n" +
+      "where py >nul 2>nul\r\n" +
+      "if %errorlevel% equ 0 (\r\n" +
+      "  echo Python Launcher: http://localhost:8080 aciliyor...\r\n" +
+      "  start \"\" http://localhost:8080\r\n" +
+      "  py -m http.server 8080\r\n" +
+      "  goto son\r\n" +
+      ")\r\n" +
+      "where npx >nul 2>nul\r\n" +
+      "if %errorlevel% equ 0 (\r\n" +
+      "  echo Node.js bulundu: http://localhost:8080 aciliyor...\r\n" +
+      "  start \"\" http://localhost:8080\r\n" +
+      "  npx --yes serve -p 8080 .\r\n" +
+      "  goto son\r\n" +
+      ")\r\n" +
+      "echo [UYARI] Python veya Node.js bulunamadi, index.html dogrudan aciliyor...\r\n" +
+      "start \"\" index.html\r\n" +
+      ":son\r\n" +
+      "pause\r\n";
+
+    const oynaSh = "#!/usr/bin/env bash\n" +
+      "cd \"$(dirname \"$0\")\"\n" +
+      "echo \"======================================================\"\n" +
+      "echo \"  MirrorLab Çevrimdışı Sunucu Başlatılıyor...\"\n" +
+      "echo \"======================================================\"\n" +
+      "PORT=8080\n" +
+      "open_url() {\n" +
+      "  sleep 1\n" +
+      "  if command -v xdg-open >/dev/null 2>&1; then xdg-open \"http://localhost:$PORT\";\n" +
+      "  elif command -v open >/dev/null 2>&1; then open \"http://localhost:$PORT\"; fi\n" +
+      "}\n" +
+      "if command -v python3 >/dev/null 2>&1; then\n" +
+      "  echo \"Python 3: http://localhost:$PORT\"\n" +
+      "  open_url &\n" +
+      "  python3 -m http.server \"$PORT\"\n" +
+      "elif command -v python >/dev/null 2>&1; then\n" +
+      "  echo \"Python: http://localhost:$PORT\"\n" +
+      "  open_url &\n" +
+      "  python -m http.server \"$PORT\"\n" +
+      "elif command -v npx >/dev/null 2>&1; then\n" +
+      "  echo \"Node.js: http://localhost:$PORT\"\n" +
+      "  open_url &\n" +
+      "  npx --yes serve -p \"$PORT\" .\n" +
+      "else\n" +
+      "  echo \"[UYARI] Python veya Node.js bulunamadı. index.html açılıyor...\"\n" +
+      "  if command -v xdg-open >/dev/null 2>&1; then xdg-open index.html; elif command -v open >/dev/null 2>&1; then open index.html; fi\n" +
+      "fi\n";
+
+    const oynaBatBytes = new TextEncoder().encode(oynaBat);
+    const oynaShBytes = new TextEncoder().encode(oynaSh);
+
     /* 4) ZIP */
-    log("[] ZIP yazılıyor (" + (pages + assets + 2 + (kaynakOzet.dosya || 0)) + " dosya)…" + (kaynakOzet.dosya ? " · :: " + kaynakOzet.dosya + " orijinal kaynak" : ""));
+    log("[] ZIP yazılıyor (" + (pages + assets + 4 + (kaynakOzet.dosya || 0)) + " dosya)…" + (kaynakOzet.dosya ? " · :: " + kaynakOzet.dosya + " orijinal kaynak" : ""));
     setStat("ZIP paketleniyor…");
     let toplamBayt = 0, indirmeUrl = null;
     if (sink) {
       await sink.put("index.html", girisBytes);
       await sink.put("README.txt", readmeBytes);
+      await sink.put("oyna.bat", oynaBatBytes);
+      await sink.put("oyna.sh", oynaShBytes);
       for (const rec of htmlRecs) await sink.put(rec.name, rec.data);
       toplamBayt = sink.bytes;
       await sink.close();
@@ -793,6 +868,7 @@
       const dl = $("#dlZip"); if (dl) { dl.disabled = true; dl.textContent = "✓ diske kaydedildi"; }
     } else {
       const all = [{ name: "index.html", data: girisBytes }, { name: "README.txt", data: readmeBytes },
+        { name: "oyna.bat", data: oynaBatBytes }, { name: "oyna.sh", data: oynaShBytes },
         ...files.filter(f => !f.streamed).map(f => ({ name: f.name, data: f.data })),
         ...htmlRecs.map(f => ({ name: f.name, data: f.data }))];
       const zip = await zipStore(all);
@@ -807,6 +883,17 @@
     }
 
     state.mirrorSeeds = null;
+    const sBtn = $("#surgeDeployBtn");
+    if (sBtn) {
+      sBtn.disabled = false;
+      sBtn.onclick = () => {
+        let clean = "ayna-kopya";
+        try { clean = new URL(seed).hostname.replace(/[^a-z0-9]/g, ""); } catch(e){}
+        const cmd = "npx surge . " + clean + ".surge.sh";
+        try { navigator.clipboard.writeText(cmd); } catch(e){}
+        alert("🚀 Surge Tek Tıkla Yayın Komutu Panoya Kopyalandı!\n\nİndirilen ZIP arşivini açıp klasörün içindeyken terminale şu komutu yapıştırın:\n" + cmd + "\n\n(Surge hesabı gerekirse terminalde anında e-posta sorar ve ücretsiz yayınlar)");
+      };
+    }
     const stopBtn2 = $("#stopCrawl"); if (stopBtn2) stopBtn2.disabled = true;
     if (pauseBtn) { pauseBtn.disabled = true; pauseBtn.textContent = "⏸ Duraklat"; }
     if (typeof oturumSil === "function" && !stopNow()) { try { oturumSil(); } catch (e) {} }
