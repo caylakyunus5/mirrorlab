@@ -12,3 +12,4 @@ output/
 # Yerel ayarlar
 .env
 .DS_Store
+.wrangler
