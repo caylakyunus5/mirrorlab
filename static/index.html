@@ -2420,23 +2420,25 @@
 
     return bulunan;
   }
-  window.derinMedyaOyunTara = derinMedyaOyunTara;
-  window.klonlaOyun = function(hedefUrl) {
-    if (!hedefUrl) return;
-    const uInput = document.getElementById("url");
-    if (uInput) uInput.value = hedefUrl;
-    if (window.state) window.state.url = hedefUrl;
-    const tabs = document.querySelectorAll("#tabs .tab");
-    if (tabs && tabs[8]) tabs[8].click();
-    const cScope = document.getElementById("cScope");
-    if (cScope) cScope.value = "media";
-    const cIframes = document.getElementById("cIframes");
-    if (cIframes) cIframes.checked = true;
-    const log = document.getElementById("crawlLog");
-    if (log) log.textContent = "ℹ Oyun URL'si seçildi: " + hedefUrl + "\n'Ayna kopyasını oluştur' butonuna basarak doğrudan bu oyunu klonlayabilirsiniz.\n";
-    const panel = document.getElementById("crawlPanel");
-    if (panel) panel.style.display = "block";
-  };
+  if (typeof window !== "undefined") {
+    window.derinMedyaOyunTara = derinMedyaOyunTara;
+    window.klonlaOyun = function(hedefUrl) {
+      if (!hedefUrl) return;
+      const uInput = document.getElementById("url");
+      if (uInput) uInput.value = hedefUrl;
+      if (window.state) window.state.url = hedefUrl;
+      const tabs = document.querySelectorAll("#tabs .tab");
+      if (tabs && tabs[8]) tabs[8].click();
+      const cScope = document.getElementById("cScope");
+      if (cScope) cScope.value = "media";
+      const cIframes = document.getElementById("cIframes");
+      if (cIframes) cIframes.checked = true;
+      const log = document.getElementById("crawlLog");
+      if (log) log.textContent = "ℹ Oyun URL'si seçildi: " + hedefUrl + "\n'Ayna kopyasını oluştur' butonuna basarak doğrudan bu oyunu klonlayabilirsiniz.\n";
+      const panel = document.getElementById("crawlPanel");
+      if (panel) panel.style.display = "block";
+    };
+  }
 
   /* ── KART: dördünü birlikte çiz ──────────────────────────────────────── */
   async function renderDerin(d) {
