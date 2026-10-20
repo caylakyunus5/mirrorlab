@@ -532,6 +532,8 @@ function log(...a) { console.error("[engine]", ...a); }
       }));
       const videos = Array.from(document.querySelectorAll("video,iframe[src*='youtu'],iframe[src*='vimeo']"))
         .slice(0, 30).map((v) => ({ tag: v.tagName.toLowerCase(), src: v.currentSrc || v.src || "", title: v.title || "" }));
+      const games = Array.from(document.querySelectorAll("iframe[src*='game'],iframe[src*='html5'],iframe[src*='play'],canvas"))
+        .slice(0, 20).map((g) => ({ tag: g.tagName.toLowerCase(), src: g.src || "", w: g.width || g.clientWidth, h: g.height || g.clientHeight }));
 
       // erişilebilirlik hızlı taraması
       const imgsNoAlt = Array.from(document.querySelectorAll("img:not([alt])")).length;
@@ -546,7 +548,7 @@ function log(...a) { console.error("[engine]", ...a); }
         colors: topify(color, 14), fonts: topify(font, 8), radii: topify(radius, 8),
         shadows: topify(shadow, 6), spacings: topify(spacing, 10),
         fontSizes: topify(size, 10), fontWeights: topify(weight, 6),
-        components: comp, usedFonts, meta, headings, forms, links, images, videos,
+        components: comp, usedFonts, meta, headings, forms, links, images, videos, games,
         a11y: { imgsNoAlt, emptyBtns, unlabeled, lang: document.documentElement.lang || "" },
         storageKeys: ls,
         counts: {

@@ -724,8 +724,20 @@ class OutlineParser(HTMLParser):
             self.counts["iframes"] += 1
             if a.get("src"):
                 node["src"] = a["src"][:120]
+                u = abs_url(self.base, a["src"])
+                if is_http(u):
+                    self.assets.append({"type": "iframe", "url": u, "tag": "iframe"})
         elif tag in ("video", "audio"):
             self.counts["videos"] += 1
+            if a.get("src"):
+                u = abs_url(self.base, a["src"])
+                if is_http(u):
+                    self.assets.append({"type": "video" if tag == "video" else "audio", "url": u, "tag": tag})
+        elif tag == "source":
+            if a.get("src"):
+                u = abs_url(self.base, a["src"])
+                if is_http(u):
+                    self.assets.append({"type": "media", "url": u, "tag": "source"})
         elif tag == "style":
             self._in_style = True
             self._buf = []
@@ -1336,6 +1348,18 @@ def crawl_worker(jid: str, start_url: str, opts: dict):
                     if is_http(au) and au not in asset_map:
                         asset_map[au] = local_path_for(au, origin_host)
             for m in re.finditer(r'<img[^>]+src=["\']([^"\']+)["\']', html, re.I):
+                au = abs_url(final_cur, m.group(1))
+                if is_http(au) and au not in asset_map:
+                    asset_map[au] = local_path_for(au, origin_host)
+
+            # script içi gömülü iframe ve oyun linklerini topla (GameDistribution vb.)
+            gd_ids = set(re.findall(r'html5\.gamedistribution\.com/([a-zA-Z0-9_-]{24,40})', html, re.I))
+            for gid in gd_ids:
+                if gid != "rvvASMiM":
+                    raw_game = f"https://html5.gamedistribution.com/rvvASMiM/{gid}/index.html"
+                    if raw_game not in asset_map:
+                        asset_map[raw_game] = local_path_for(raw_game, origin_host)
+            for m in re.finditer(r'<iframe[^>]+src=["\']([^"\']+)["\']', html, re.I):
                 au = abs_url(final_cur, m.group(1))
                 if is_http(au) and au not in asset_map:
                     asset_map[au] = local_path_for(au, origin_host)

@@ -42,7 +42,7 @@
   function eocd(count, cenLen, cenOff) {
     return new Uint8Array([...U32(0x06054b50), ...U16(0), ...U16(0), ...U16(count), ...U16(count), ...U32(cenLen), ...U32(cenOff), ...U16(0)]);
   }
-  const TEXT_EXT = /\.(html?|css|js|mjs|cjs|json|txt|xml|svg|map|webmanifest|csv|md|ico|woff2?)$/i;
+  const TEXT_EXT = /\.(html?|css|js|mjs|cjs|json|txt|xml|svg|map|webmanifest|csv|md|ico|woff2?|m3u8|mpd)$/i;
   async function deflateRaw(u8) {
     if (typeof CompressionStream === "undefined") return null;
     try {
@@ -182,6 +182,9 @@
     "image/svg+xml": ".svg", "image/x-icon": ".ico", "image/vnd.microsoft.icon": ".ico", "image/avif": ".avif",
     "font/woff2": ".woff2", "font/woff": ".woff", "font/ttf": ".ttf", "application/font-woff2": ".woff2",
     "application/json": ".json", "text/plain": ".txt", "application/pdf": ".pdf", "video/mp4": ".mp4",
+    "video/webm": ".webm", "video/ogg": ".ogv", "audio/mpeg": ".mp3", "audio/ogg": ".ogg", "audio/wav": ".wav",
+    "application/wasm": ".wasm", "application/octet-stream": ".bin",
+    "application/vnd.apple.mpegurl": ".m3u8", "application/x-mpegurl": ".m3u8",
   };
   const extFor = (ct) => EXT[String(ct || "").split(";")[0].trim()] || ".bin";
   const hasExt = (p) => /\.[a-z0-9]{1,6}$/i.test(p.split("/").pop() || "");
@@ -379,7 +382,10 @@
     const maxPages  = UNL ? Infinity : Math.max(tohumlar ? tohumlar.length : 0, devamKuyruk ? devamKuyruk.length : 0, Math.max(1, +cPages.value || 20));
     const maxAssets = UNL ? Infinity : Math.max(0, +cAssets.value || 250);
     const maxBytes  = UNL ? Infinity : Math.max(1, +cMb.value || 60) * 1048576;
-    const sameHost = $("#cScope").value === "1";
+    const scopeVal = ($("#cScope") && $("#cScope").value) || "media";
+    const sameHost = scopeVal === "1";
+    const mediaScope = scopeVal === "media" || scopeVal === "0";
+    const iframesOn = $("#cIframes") ? $("#cIframes").checked : true;
     const robotsOn = $("#cRobots").checked, cssAssets = $("#cCssAssets").checked;
     const renderModu = !!($("#cRender") && $("#cRender").checked);
     const seedHost = new URL(seed).host;
@@ -413,7 +419,8 @@
     const stopBtn = $("#stopCrawl"); if (stopBtn) { stopBtn.disabled = false; }
     setStat(UNL ? "[∞] sınırsız kopyalanıyor…" : "tarayıcıda kopyalanıyor…");
     log("▶ " + (UNL ? "Sınırsız ayna" : "Ayna") + ": " + seed);
-    log("  Kapsam: " + (sameHost ? "yalnızca " + seedHost : "tüm alan adları") +
+    log("  Kapsam: " + (scopeVal === "media" ? "Akıllı (site içi + CDN/Gömülü Medya/Oyun)" : (sameHost ? "yalnızca " + seedHost : "tüm alan adları")) +
+        " · Gömülü çerçeveler/oyunlar: " + (iframesOn ? "dahil" : "hariç") +
         " · robots.txt: " + (robotsOn ? "uyuluyor" : "yok sayılıyor (sorumluluk kullanıcıda)"));
 
     function claimPath(u, kind) {
@@ -454,13 +461,15 @@
     }
 
     /* varlık indirici */
-    const fetchAsset = async (abs, referer) => {
+    const fetchAsset = async (abs, referer, isIframe = false) => {
       if (paths.has(abs)) return paths.get(abs);
       if (assets >= maxAssets) { skipped++; return null; }
       if (bytes >= maxBytes) { skipped++; return null; }
       if (sink && sink.count + 1 >= ZIP_MAX_FILES) { skipped++; return null; }
       const o = new URL(abs);
-      if (sameHost && o.host !== seedHost && o.host !== new URL(referer || seed).host) { skipped++; return null; }
+      const isCdnOrMedia = /cdn|static|assets|media|img|images|game|html5|storage|aws|gamedistribution|gamepix|poki|famobi|crazygames|unity|phaser|cdnjs|jsdelivr|unpkg/i.test(o.host) ||
+                           /\.(wasm|data|pck|unityweb|m3u8|mpd|mp4|webm|ogg|wav|json|png|jpg|jpeg|gif|svg|webp|css|js)$/i.test(o.pathname);
+      if (sameHost && o.host !== seedHost && o.host !== new URL(referer || seed).host && !(mediaScope && isCdnOrMedia)) { skipped++; return null; }
       /* robots.txt ALAN ADI BAŞINA geçerlidir: başka sunuculardan (CDN) gelen
          dosyalara buranın kuralları uygulanmaz. */
       if (robotsOn && robots.length && o.host === seedHost && robotsBlocked(robots, o.pathname)) { skipped++; return null; }
@@ -471,9 +480,67 @@
         return null;
       }
       assets++;
-      let name = claimPath(abs, "asset");
-      if (!hasExt(name)) name = name + extFor(r.ctype);
+      let name = claimPath(abs, isIframe ? "page" : "asset");
+      if (!hasExt(name)) name = name + (isIframe ? ".html" : extFor(r.ctype));
       let data = r.bytes;
+
+      /* Gömülü iframe / HTML5 oyun çerçevesi: içindeki varlıkları da indir ve yerelleştir */
+      if (isIframe || (r.ctype && r.ctype.includes("text/html") && abs !== seed)) {
+        const ifBase = r.finalUrl || abs;
+        let ifHtml = new TextDecoder().decode(data);
+        const ifDoc = new DOMParser().parseFromString(ifHtml, "text/html");
+        const ifItems = [];
+        const ifPush = (el, attr, val) => { const a = absUrl(val, ifBase); if (a) ifItems.push({ el, attr, abs: a }); };
+        ifDoc.querySelectorAll("link[href]").forEach(el => {
+          const rel = (el.getAttribute("rel") || "").toLowerCase();
+          if (/stylesheet|icon|apple-touch|preload|prefetch|manifest/.test(rel)) ifPush(el, "href", el.getAttribute("href"));
+        });
+        ifDoc.querySelectorAll("script[src]").forEach(el => ifPush(el, "src", el.getAttribute("src")));
+        ifDoc.querySelectorAll("img[src]").forEach(el => ifPush(el, "src", el.getAttribute("src")));
+        ifDoc.querySelectorAll("source[src]").forEach(el => ifPush(el, "src", el.getAttribute("src")));
+        ifDoc.querySelectorAll("video[src],audio[src]").forEach(el => ifPush(el, "src", el.getAttribute("src")));
+
+        // GameDistribution / gömülü oyun motoru çözücü (rvvASMiM vb.)
+        const nestedGameMatch = ifHtml.match(/gameSrc\s*=\s*["']([^"']+)["']/i) ||
+                                ifHtml.match(/(\/\/[^"'\s]*gamedistribution\.com\/rvvASMiM\/[^\s"']+)/i);
+        if (nestedGameMatch && nestedGameMatch[1]) {
+          const gameUrl = absUrl(nestedGameMatch[1], ifBase);
+          if (gameUrl) {
+            log("    🎮 Gömülü Oyun Motoru: " + gameUrl.slice(0, 55));
+            const localGame = await fetchAsset(gameUrl, ifBase, true);
+            if (localGame) {
+              ifHtml = ifHtml.replace(nestedGameMatch[0], 'gameSrc = "' + relPath(name, localGame) + '"');
+            }
+          }
+        }
+
+        for (const it of ifItems) {
+          if (bytes >= maxBytes || stopNow()) break;
+          const local = await fetchAsset(it.abs, ifBase);
+          if (local) it.el.setAttribute(it.attr, relPath(name, local));
+        }
+
+        if (cssAssets) {
+          for (const el of ifDoc.querySelectorAll("style")) {
+            const t = el.textContent || "";
+            if (!/url\(|@import/i.test(t)) continue;
+            const nested = [];
+            const first = rewriteCssUrls(t, ifBase, (nu) => { nested.push(nu); return null; });
+            for (const nu of nested) await fetchAsset(nu, ifBase);
+            el.textContent = rewriteCssUrls(first, ifBase, (nu) => { const p2 = paths.get(nu); return p2 ? relPath(name, p2) : null; });
+          }
+        }
+
+        const ifDoctype = /<!doctype/i.test(ifHtml.slice(0, 200)) ? "<!DOCTYPE html>\n" : "";
+        data = new TextEncoder().encode(ifDoctype + ifDoc.documentElement.outerHTML);
+        fileBy.set(name, { name, data, src: abs }); paths.set(abs, name);
+        bytes += data.length; bump();
+        if (sink) { await sink.put(name, data); }
+        else files.push({ name, data, src: abs });
+        log("  🎮 Gömülü Çerçeve/Oyun: " + name + " (" + (data.length / 1024).toFixed(0) + " KB)");
+        return name;
+      }
+
       if (cssAssets && r.ctype.includes("css")) {
         const base = r.finalUrl || abs;
         let css = new TextDecoder().decode(data);
@@ -545,7 +612,10 @@
 
       /* 1) varlıkları topla */
       const items = [];
-      const push = (el, attr, val) => { const abs = absUrl(val, base); if (abs) items.push({ el, attr, abs }); };
+      const push = (el, attr, val, isIfr = false) => {
+        const abs = absUrl(val, base);
+        if (abs) items.push({ el, attr, abs, isIframe: isIfr });
+      };
       doc.querySelectorAll("link[href]").forEach(el => {
         const rel = (el.getAttribute("rel") || "").toLowerCase();
         if (/stylesheet|icon|apple-touch|preload|prefetch|manifest/.test(rel)) push(el, "href", el.getAttribute("href"));
@@ -557,9 +627,23 @@
       doc.querySelectorAll("video[src],audio[src]").forEach(el => push(el, "src", el.getAttribute("src")));
       doc.querySelectorAll("object[data]").forEach(el => push(el, "data", el.getAttribute("data")));
       doc.querySelectorAll("embed[src]").forEach(el => push(el, "src", el.getAttribute("src")));
+      if (iframesOn) {
+        doc.querySelectorAll("iframe[src]").forEach(el => push(el, "src", el.getAttribute("src"), true));
+        // Script içinde oluşturulan iframe string'lerini de tara (Kizi / GameDistribution game_embed_code)
+        const rawScriptIframes = html.match(/<iframe[^>]*src=\\?["']([^"'\\]+)\\?["'][^>]*>/gi) || [];
+        for (const sm of rawScriptIframes) {
+          const uMatch = sm.match(/src=\\?["']([^"'\\]+)\\?["']/i);
+          if (uMatch && uMatch[1]) {
+            const iframeAbs = absUrl(uMatch[1], base);
+            if (iframeAbs && !paths.has(iframeAbs)) {
+              await fetchAsset(iframeAbs, base, true);
+            }
+          }
+        }
+      }
       for (const it of items) {
         if (bytes >= maxBytes || stopNow()) break;
-        const local = await fetchAsset(it.abs, base);
+        const local = await fetchAsset(it.abs, base, it.isIframe);
         if (local) it.el.setAttribute(it.attr, relPath(pageDir, local));
         else {
           const oo = new URL(it.abs);
@@ -684,7 +768,13 @@
       (kaynakOzet.dosya ? "Orijinal kaynak (source map): " + kaynakOzet.dosya + " dosya / " + (kaynakOzet.toplam / 1048576).toFixed(2) + " MB\n" : "") +
       (UNL ? "Sınır: yok (ZIP32 teknik tavanı: 65.535 dosya / 4 GB)\n" : "") +
       "\nGezinme: index.html dosyasını açın.\n" +
-      "Not: Klonlanan içerik telif hakkı sahibine aittir; yalnızca inceleme/arşiv/öğrenme amaçlıdır.\n";
+      "\n🎮 GÖMÜLÜ OYUNLAR VE MEDYA:\n" +
+      "HTML5 oyunları (Phaser/Canvas/WebGL/WASM) ve video oynatıcıları tarayıcı CORS güvenlik kuralları gereği\n" +
+      "çift tıklanarak ('file://') açıldığında engellenebilir.\n" +
+      "Çevrimdışı sorunsuz çalıştırmak için terminalde yerel sunucu başlatın:\n" +
+      "  Python: python3 -m http.server 8080   (tarayıcıda http://localhost:8080)\n" +
+      "  Node.js: npx serve .\n" +
+      "\nNot: Klonlanan içerik telif hakkı sahibine aittir; yalnızca inceleme/arşiv/öğrenme amaçlıdır.\n";
     const readmeBytes = new TextEncoder().encode(readme);
 
     /* 4) ZIP */

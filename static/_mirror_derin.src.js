@@ -90,6 +90,14 @@
       ["Video.js / HLS", /video(?:\.min)?\.js|hls\.js|dash\.all\.min\.js/i],
       ["PDF.js", /pdf(?:\.min)?\.js|pdfjs-dist/i],
       ["Sentry (izleme)", /sentry[.-]|@sentry\//i],
+      ["Phaser (Oyun Motoru)", /phaser[@/](\d+[\d.]*)|phaser(?:\.min)?\.js|Phaser\.Game/i],
+      ["Pixi.js (2D WebGL)", /pixi(?:\.js)?[@/](\d+[\d.]*)|pixi(?:\.min)?\.js|PIXI\.Application/i],
+      ["Unity WebGL", /createUnityInstance|UnityLoader|\.unityweb/i],
+      ["Godot Engine (HTML5)", /godot(?:\.min)?\.js|engine\.wasm|\.pck/i],
+      ["Construct (Oyun Motoru)", /c2runtime\.js|c3runtime\.js/i],
+      ["Cocos2d (Oyun Motoru)", /cocos2d-js|cc\.game/i],
+      ["Hls.js (Video Akışı)", /hls(?:\.min)?\.js|Hls\.isSupported/i],
+      ["Video.js", /video(?:\.min)?\.js|vjs-tech|videojs\(/i],
     ];
     const htt = H + "\n" + U;
     for (const [ad, re] of kutuphane) {
@@ -347,6 +355,204 @@
     return sonuc;
   }
 
+  /* ── 5) GÖMÜLÜ OYUN & MEDYA ÇIKARICI ─────────────────────────────────── */
+  function derinMedyaOyunTara(ctx) {
+    const H = ctx.html || "", U = ctx.urlMetni || "", sayfaUrl = ctx.url || "";
+    const bulunan = [];
+    const gorulen = new Set();
+    const ekle = (item) => {
+      const anahtar = (item.safUrl || item.url || "").trim();
+      if (!anahtar || gorulen.has(anahtar)) return;
+      gorulen.add(anahtar);
+      bulunan.push(item);
+    };
+
+    /* 1) GameDistribution (Kizi, Agame vb.) */
+    const gdIds = new Set();
+    const gdRe = /html5\.gamedistribution\.com\/([a-zA-Z0-9_-]{24,40})/gi;
+    let mGd;
+    while ((mGd = gdRe.exec(H + " " + U)) !== null) {
+      if (mGd[1] && mGd[1] !== "rvvASMiM") gdIds.add(mGd[1]);
+    }
+    for (const gid of gdIds) {
+      ekle({
+        tur: "oyun",
+        saglayici: "GameDistribution",
+        ad: "GameDistribution HTML5 Oyunu (" + gid.slice(0, 8) + "…)",
+        url: "https://html5.gamedistribution.com/" + gid + "/",
+        safUrl: "https://html5.gamedistribution.com/rvvASMiM/" + gid + "/index.html",
+        motor: "Phaser / HTML5 Canvas / WebGL",
+        not: "Kizi / Portal arayüzü atlandı; saf Amazon S3 oyun motoru URL'si çözüldü.",
+        oneri: "Portal yerine doğrudan bu bağlantıyı kopyalayarak reklamsız ve tam ekran arşivleyebilirsiniz."
+      });
+    }
+
+    /* 2) GamePix */
+    const gpRe = /https?:\/\/(?:games\.)?gamepix\.com\/play\/([a-zA-Z0-9_-]+)/gi;
+    let mGp;
+    while ((mGp = gpRe.exec(H + " " + U)) !== null) {
+      ekle({
+        tur: "oyun",
+        saglayici: "GamePix",
+        ad: "GamePix Oyunu (" + mGp[1] + ")",
+        url: mGp[0],
+        safUrl: mGp[0],
+        motor: "HTML5 / Canvas",
+        not: "GamePix doğrudan oynatıcı bağlantısı.",
+        oneri: "Doğrudan oynanabilir bağımsız oyun sayfası."
+      });
+    }
+
+    /* 3) Poki GDN */
+    const pokiRe = /https?:\/\/[a-zA-Z0-9.-]*poki-gdn\.com\/[^\s"'<>]+/gi;
+    let mPoki;
+    while ((mPoki = pokiRe.exec(H + " " + U)) !== null) {
+      ekle({
+        tur: "oyun",
+        saglayici: "Poki GDN",
+        ad: "Poki HTML5 Oyunu",
+        url: mPoki[0],
+        safUrl: mPoki[0],
+        motor: "HTML5 / WebGL",
+        not: "Poki içerik dağıtım ağı (GDN) oyun adresi."
+      });
+    }
+
+    /* 4) Famobi */
+    const famobiRe = /https?:\/\/play\.famobi\.com\/[^\s"'<>]+/gi;
+    let mFam;
+    while ((mFam = famobiRe.exec(H + " " + U)) !== null) {
+      ekle({
+        tur: "oyun",
+        saglayici: "Famobi",
+        ad: "Famobi HTML5 Oyunu",
+        url: mFam[0],
+        safUrl: mFam[0],
+        motor: "HTML5 / Canvas",
+        not: "Famobi doğrudan oyun oynatıcı adresi."
+      });
+    }
+
+    /* 5) CrazyGames */
+    const crazyRe = /https?:\/\/[a-zA-Z0-9.-]*crazygames\.com\/(?:game|gameframe)\/[^\s"'<>]+/gi;
+    let mCrz;
+    while ((mCrz = crazyRe.exec(H + " " + U)) !== null) {
+      ekle({
+        tur: "oyun",
+        saglayici: "CrazyGames",
+        ad: "CrazyGames Oyun Çerçevesi",
+        url: mCrz[0],
+        safUrl: mCrz[0],
+        motor: "HTML5 / WebGL",
+        not: "CrazyGames gömülü oyun bağlantısı."
+      });
+    }
+
+    /* 6) HTML içindeki <iframe src="..."> ve script string'lerindeki çerçeveler */
+    const ifRe = /<iframe[^>]*src=\\?["']([^"'\\]+)\\?["']/gi;
+    let mIf;
+    while ((mIf = ifRe.exec(H)) !== null) {
+      const isrc = mIf[1];
+      if (/youtu\.?be|youtube\.com/i.test(isrc)) {
+        ekle({
+          tur: "video",
+          saglayici: "YouTube",
+          ad: "YouTube Gömülü Video",
+          url: isrc,
+          safUrl: isrc,
+          motor: "YouTube Video Oynatıcı",
+          not: "Gömülü iframe oynatıcısı."
+        });
+      } else if (/vimeo\.com/i.test(isrc)) {
+        ekle({
+          tur: "video",
+          saglayici: "Vimeo",
+          ad: "Vimeo Gömülü Video",
+          url: isrc,
+          safUrl: isrc,
+          motor: "Vimeo Video Oynatıcı",
+          not: "Gömülü iframe oynatıcısı."
+        });
+      } else if (/game|play|html5|unity|wasm|canvas/i.test(isrc)) {
+        try {
+          const absIframe = new URL(isrc, sayfaUrl || (typeof location !== "undefined" ? location.href : "https://kizi.com")).href;
+          ekle({
+            tur: "oyun",
+            saglayici: "Gömülü Oyun Çerçevesi",
+            ad: "HTML5 Oyun Iframe'i",
+            url: absIframe,
+            safUrl: absIframe,
+            motor: "Iframe / WebGL / Canvas",
+            not: "Sayfa içinden tespit edilen harici oyun çerçevesi."
+          });
+        } catch (e) {}
+      }
+    }
+
+    /* 7) Video / Audio dosyaları ve akışları (.m3u8, .mpd, .mp4, .webm) */
+    const m3u8Re = /https?:\/\/[^\s"'<>]+\.m3u8(?:\?[^\s"'<>]*)?/gi;
+    let mM3;
+    while ((mM3 = m3u8Re.exec(H + " " + U)) !== null) {
+      ekle({
+        tur: "video",
+        saglayici: "HLS Canlı Akış",
+        ad: "HLS Video Akışı (.m3u8)",
+        url: mM3[0],
+        safUrl: mM3[0],
+        motor: "Hls.js / Canlı Video Akışı",
+        not: "Dinamik video akış parçaları (m3u8 oynatma listesi)."
+      });
+    }
+
+    const mp4Re = /https?:\/\/[^\s"'<>]+\.(?:mp4|webm|ogv)(?:\?[^\s"'<>]*)?/gi;
+    let mMp4;
+    while ((mMp4 = mp4Re.exec(H + " " + U)) !== null) {
+      ekle({
+        tur: "video",
+        saglayici: "Doğrudan Medya",
+        ad: "Video Dosyası (" + mMp4[0].split("/").pop().split("?")[0].slice(0, 35) + ")",
+        url: mMp4[0],
+        safUrl: mMp4[0],
+        motor: "HTML5 Video",
+        not: "Doğrudan indirilebilir video varlığı."
+      });
+    }
+
+    /* 8) WebAssembly & Unity & Godot veri paketleri */
+    const wasmRe = /https?:\/\/[^\s"'<>]+\.(?:wasm|data|pck|unityweb)(?:\?[^\s"'<>]*)?/gi;
+    let mWasm;
+    while ((mWasm = wasmRe.exec(H + " " + U)) !== null) {
+      ekle({
+        tur: "oyun",
+        saglayici: "Oyun Motoru Paketi",
+        ad: "İkili Oyun Verisi (" + mWasm[0].split("/").pop().split("?")[0] + ")",
+        url: mWasm[0],
+        safUrl: mWasm[0],
+        motor: "WebAssembly / Unity / Godot",
+        not: "Oyun motorunun çalışma zamanında indirdiği ikili kod/veri dosyası."
+      });
+    }
+
+    return bulunan;
+  }
+  window.derinMedyaOyunTara = derinMedyaOyunTara;
+  window.klonlaOyun = function(hedefUrl) {
+    if (!hedefUrl) return;
+    const uInput = document.getElementById("url");
+    if (uInput) uInput.value = hedefUrl;
+    if (window.state) window.state.url = hedefUrl;
+    const tabs = document.querySelectorAll("#tabs .tab");
+    if (tabs && tabs[8]) tabs[8].click();
+    const cScope = document.getElementById("cScope");
+    if (cScope) cScope.value = "media";
+    const cIframes = document.getElementById("cIframes");
+    if (cIframes) cIframes.checked = true;
+    const log = document.getElementById("crawlLog");
+    if (log) log.textContent = "ℹ Oyun URL'si seçildi: " + hedefUrl + "\n'Ayna kopyasını oluştur' butonuna basarak doğrudan bu oyunu klonlayabilirsiniz.\n";
+    const panel = document.getElementById("crawlPanel");
+    if (panel) panel.style.display = "block";
+  };
+
   /* ── KART: dördünü birlikte çiz ──────────────────────────────────────── */
   async function renderDerin(d) {
     const kutu = $("#engineBody");
@@ -374,14 +580,39 @@
     const teknoloji = derinTeknoloji({ html, urlMetni, basliklar: basR.headers || {}, cssMetni });
     const guvenlik = basR.ok ? derinGuvenlikDegerlendir(basR.headers, basR.status) : null;
     const oa = derinOpenApi(d);
+    const medyaOyun = derinMedyaOyunTara({ html, urlMetni, url: sayfaUrl });
 
     const nokta = (durum) => durum === "iyi" ? "✓" : durum === "orta" ? "!" : durum === "kotu" ? "x" : "•";
     const renk = (durum) => durum === "iyi" ? DERIN_RENK.iyi : durum === "orta" ? DERIN_RENK.orta : durum === "kotu" ? DERIN_RENK.kotu : DERIN_RENK.notr;
 
     let h = '<div class="card" id="derinKart" style="border-left:4px solid #ffd479">' +
       '<div class="row" style="align-items:center"><h3 style="margin:0">:: Tersine mühendislik paketi (REA derinliği)</h3><div class="spacer"></div>' +
-      '<span class="hint">4 katman · kanıtlı</span></div>' +
-      '<div class="sub">Teknoloji sürümleri, güvenlik duruşu, API şeması ve kaynak kod — hepsi gözlemlenen kanıtlardan çıkarılır.</div>';
+      '<span class="hint">' + (medyaOyun.length ? '5' : '4') + ' katman · kanıtlı</span></div>' +
+      '<div class="sub">Teknoloji sürümleri, güvenlik duruşu, gömülü oyun/medya, API şeması ve kaynak kod — hepsi gözlemlenen kanıtlardan çıkarılır.</div>';
+
+    /* 0) gömülü oyun ve medya çıkarıcı (varsa en üstte) */
+    if (medyaOyun.length) {
+      h += '<details open style="margin-top:12px;border:1px solid #00d26a;border-radius:10px;padding:8px 12px;background:rgba(0,210,106,0.04)">' +
+        '<summary style="cursor:pointer;font-weight:700;color:#7dfa9b;font-size:14px">🎮 Gömülü Oyun & Medya Çıkarıcı <span class="hint" style="color:#7dfa9b">(' + medyaOyun.length + ' içerik tespit edildi)</span></summary>' +
+        '<div class="sub" style="margin-top:6px">Bu sayfada harici sunuculardan yüklenen oyunlar veya video akışları bulundu. Oyun portalları (Kizi, Poki vb.) oyunları harici çerçevelerde oynatır; tüm siteyi klonlamak yerine <b>doğrudan oyun adresini klonlamak</b> reklamsız ve tam ekran çalışmasını sağlar.</div>' +
+        '<div style="margin-top:10px;display:flex;flex-direction:column;gap:10px">';
+      medyaOyun.forEach((m) => {
+        const hedefUrl = m.safUrl || m.url;
+        h += '<div style="background:#0d0902;border:1px solid #332200;border-radius:8px;padding:10px">' +
+          '<div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">' +
+            '<span class="badge ok">' + (m.tur === 'oyun' ? '🎮 Oyun' : '🎬 Medya') + '</span>' +
+            '<b>' + dk(m.ad) + '</b>' +
+            '<span class="hint mono">' + dk(m.saglayici) + ' · ' + dk(m.motor) + '</span>' +
+            '<div class="spacer"></div>' +
+            '<button class="btn primary sm" onclick="window.klonlaOyun && window.klonlaOyun(\'' + dk(hedefUrl) + '\')">🎯 Bu Oyunu Doğrudan Klonla</button>' +
+            '<a class="btn sm" href="' + dk(hedefUrl) + '" target="_blank" rel="noopener">↗ Saf Oyunu Aç</a>' +
+          '</div>' +
+          '<div class="mono hint" style="margin-top:6px;word-break:break-all;font-size:11px">' + dk(hedefUrl) + '</div>' +
+          '<div class="sub" style="margin-top:4px;font-size:12px">' + dk(m.not) + ' ' + (m.oneri ? '<b>' + dk(m.oneri) + '</b>' : '') + '</div>' +
+        '</div>';
+      });
+      h += '</div></details>';
+    }
 
     /* 1) teknoloji */
     h += '<details open style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">[] Teknoloji ve sürüm envanteri <span class="hint">' + teknoloji.length + ' bulgu</span></summary>' +

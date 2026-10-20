@@ -82,7 +82,7 @@
     if (stil === 0 && !spaCati) notlar.push("Harici stil dosyası yok -> görünüm satır içi stillerden geliyor olabilir.");
 
     /* 5) gömülü çerçeve, form, giriş */
-    if ((c.iframes || 0) > 0) notlar.push((c.iframes) + " gömülü çerçeve (iframe) var -> çerçeve içerikleri kopyaya girmez.");
+    if ((c.iframes || 0) > 0) notlar.push((c.iframes) + " gömülü çerçeve (iframe) / oyun var -> 'Gömülü çerçeveleri indir' seçeneğiyle yerelleştirilebilir veya doğrudan oyun adresi klonlanabilir.");
     if ((c.forms || 0) > 0) notlar.push((c.forms) + " form var -> formların çalışması için arka uç gerekir, kopyada işlevsiz kalır.");
     if (api > 0) notlar.push(api + " API çağrısı gözlendi -> dinamik veriler kopyaya dahil olmaz, sayfa statik anlık görüntü olur.");
 

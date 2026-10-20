@@ -204,6 +204,7 @@
       if (a.assets) $("#cAssets").value = a.assets;
       if (a.mb) $("#cMb").value = a.mb;
       if (a.scope != null) $("#cScope").value = a.scope;
+      if (a.iframes != null && $("#cIframes")) $("#cIframes").checked = !!a.iframes;
       if (a.robots != null) $("#cRobots").checked = !!a.robots;
       if (a.render != null && $("#cRender")) $("#cRender").checked = !!a.render;
       state.devamKuyruk = o2.kuyruk || [];

@@ -466,7 +466,25 @@ async function handleAnalyze(url) {
       },
     })
     .on("a", { element: () => { stats.links++; } })
-    .on("iframe", { element: () => { stats.iframes++; } })
+    .on("iframe", {
+      element: (el) => {
+        stats.iframes++;
+        const s = el.getAttribute("src");
+        if (s) addAsset("iframe", absUrl(target, s));
+      },
+    })
+    .on("video, audio", {
+      element: (el) => {
+        const s = el.getAttribute("src");
+        if (s) addAsset("media", absUrl(target, s));
+      },
+    })
+    .on("source", {
+      element: (el) => {
+        const s = el.getAttribute("src");
+        if (s) addAsset("media", absUrl(target, s));
+      },
+    })
     .on("form", { element: () => { stats.forms++; } })
     .on("style", { text: (c) => { stats.inlineStyleBytes += c.text.length; } })
     .on("h1, h2, h3", {
